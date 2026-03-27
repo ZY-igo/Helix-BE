@@ -1,0 +1,46 @@
+server:
+  port: 16660
+spring:
+  application:
+    name: Helix2.0
+  datasource:
+    url: jdbc:postgresql://192.168.115.23:5432/helix
+    username: admin
+    password: Sipc@postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  elasticsearch:
+    uris:
+      - http://192.168.115.23:9200
+
+app:
+  zhipu:
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    api-key: fae23c891a9a46e5a095d7d83d7c722e.NBzylYE1RyHH42H5
+    model: glm-5
+    temperature: 1.0
+    max-tokens: 4096
+    thinking: disabled
+    connect-timeout: 5000
+    read-timeout: 450000
+    max-retries: 1
+    retry-backoff-ms: 2000
+  feishu:
+    app-id: cli_a8c06e5d9f3bd00b
+    app-secret: u7KdLgq1g7k58rbSOLNy6fKeqcHM27ms
+    chat-id: oc_6a06f2ca7c3bad6461701fafcdbf9af3
+    enable-cloud-doc: true
+    docx-url-prefix: https://feishu.cn/docx/
+  report:
+    cron: "0 0 9 * * *"
+    zone-id: Asia/Shanghai
+    loop-rounds: 2
+    audit-loops: 1
+    max-items-per-section: 3
+
+logging:
+  level:
+    root: INFO
+    com.sipc115.helix: INFO
