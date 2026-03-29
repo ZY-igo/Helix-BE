@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.service.BotCommandService;
-import com.sipc115.helix.service.FeishuClient;
+import com.sipc115.helix.config.FeishuClient;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

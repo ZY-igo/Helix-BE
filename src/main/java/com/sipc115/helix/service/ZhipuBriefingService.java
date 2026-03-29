@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.config.BotProperties;
+import com.sipc115.helix.context.BriefingPromptBuilder;
 import com.sipc115.helix.model.dto.BriefingItem;
 import com.sipc115.helix.model.dto.DailyBriefing;
 import com.sipc115.helix.repository.es.AiDailyReportRepository;

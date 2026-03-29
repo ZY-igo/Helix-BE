@@ -1,4 +1,4 @@
-package com.sipc115.helix.service;
+package com.sipc115.helix.context;
 
 import com.sipc115.helix.model.dto.BriefingItem;
 import com.sipc115.helix.model.dto.DailyBriefing;

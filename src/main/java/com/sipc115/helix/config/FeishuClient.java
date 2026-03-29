@@ -1,8 +1,8 @@
-package com.sipc115.helix.service;
+package com.sipc115.helix.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sipc115.helix.config.BotProperties;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;

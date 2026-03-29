@@ -2,6 +2,8 @@ package com.sipc115.helix.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sipc115.helix.config.FeishuClient;
+import com.sipc115.helix.context.BriefingFormatter;
 import com.sipc115.helix.model.dto.DailyBriefing;
 import com.sipc115.helix.model.entity.DailyReportStatus;
 import com.sipc115.helix.model.es.AiDailyReportDocument;
