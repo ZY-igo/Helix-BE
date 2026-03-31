@@ -2,6 +2,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 
 /**
  * 条件节点执行器
@@ -41,7 +42,7 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "CONDITION".equals(type);
+        return DslNodeType.CONDITION.name().equals(type);
     }
 
     /**

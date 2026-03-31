@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.runtime;
 
+import com.sipc115.helix.domain.workflow.DslNodeType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +11,7 @@ import java.util.Map;
  * <p>
  * 负责管理和注册不同类型的工作流节点执行器，根据节点类型获取对应的执行器。
  * 支持通过类名和节点类型两种方式注册和获取执行器。
- * 
+ *
  * @author Helix Team
  * @since 2.0.0
  */
@@ -26,7 +27,7 @@ public class NodeExecutorRegistry {
      * 构造函数
      * <p>
      * 初始化执行器注册表，注册所有提供的执行器实例。
-     * 
+     *
      * @param executors 工作流节点执行器列表
      */
     public NodeExecutorRegistry(List<WorkflowNodeExecutor> executors) {
@@ -34,13 +35,27 @@ public class NodeExecutorRegistry {
         for (WorkflowNodeExecutor executor : executors) {
             delegate.put(executor.getClass().getSimpleName(), executor);
         }
-        
-        // 然后按节点类型注册，避免在 Workflow 中依赖 Spring Bean 名称
+
+        // 然后让每个执行器自己注册支持的类型（动态推导，不再硬编码）
         for (WorkflowNodeExecutor executor : executors) {
-            for (String candidate : new String[]{"START", "END", "ACTIVITY", "CONDITION", "DELAY", "HUMAN_INPUT", "CHILD_WORKFLOW", "TRANSFORM"}) {
-                if (executor.supports(candidate)) {
-                    delegate.put(candidate, executor);
-                }
+            registerExecutor(executor);
+        }
+    }
+
+    /**
+     * 注册执行器支持的类型
+     * <p>
+     * 通过执行器的 supports 方法动态发现其支持的类型，避免硬编码。
+     *
+     * @param executor 工作流节点执行器
+     */
+    private void registerExecutor(WorkflowNodeExecutor executor) {
+        // 遍历所有可能的节点类型（从 DslNodeType 枚举获取）
+        for (DslNodeType type : DslNodeType.values()) {
+            String typeName = type.name();
+            if (executor.supports(typeName)) {
+                delegate.put(typeName, executor);
+                break; // 一个执行器只支持一种主要类型
             }
         }
     }

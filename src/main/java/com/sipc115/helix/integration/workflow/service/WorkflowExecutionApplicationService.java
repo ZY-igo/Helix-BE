@@ -6,7 +6,7 @@ import com.sipc115.helix.domain.workflow.HumanSignalPayload;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionRequest;
 import com.sipc115.helix.domain.workflow.WorkflowStateView;
 import com.sipc115.helix.integration.workflow.port.ExecutionPlanRepository;
-import com.sipc115.helix.integration.workflow.temporal.workflow.DslOrchestratorWorkflow;
+import com.sipc115.helix.integration.workflow.runtime.DslOrchestratorWorkflow;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;

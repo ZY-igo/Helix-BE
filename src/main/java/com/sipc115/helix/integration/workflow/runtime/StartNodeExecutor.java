@@ -2,6 +2,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 
 /**
  * 开始节点执行器
@@ -23,7 +24,7 @@ public class StartNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "START".equals(type);
+        return DslNodeType.START.name().equals(type);
     }
 
     /**

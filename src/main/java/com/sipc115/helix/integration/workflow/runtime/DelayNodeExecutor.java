@@ -1,6 +1,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 
 import java.time.Duration;
 
@@ -22,7 +23,7 @@ public class DelayNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "DELAY".equals(type);
+        return DslNodeType.DELAY.name().equals(type);
     }
 
     /**

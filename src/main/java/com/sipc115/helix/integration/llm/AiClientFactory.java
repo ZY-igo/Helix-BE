@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.ai;
+package com.sipc115.helix.integration.llm;
 
 import java.util.List;
 import java.util.Map;

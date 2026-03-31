@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.temporal.workflow;
+package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.HumanSignalPayload;

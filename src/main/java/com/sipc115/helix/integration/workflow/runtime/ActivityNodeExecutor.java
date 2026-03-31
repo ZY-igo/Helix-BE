@@ -1,6 +1,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 
 import java.util.Map;
 
@@ -22,7 +23,7 @@ public class ActivityNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "ACTIVITY".equals(type);
+        return DslNodeType.ACTIVITY.name().equals(type);
     }
 
     /**

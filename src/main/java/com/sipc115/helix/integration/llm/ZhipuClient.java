@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.ai;
+package com.sipc115.helix.integration.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

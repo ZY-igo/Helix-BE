@@ -2,6 +2,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 
 /**
  * 结束节点执行器
@@ -23,7 +24,7 @@ public class EndNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "END".equals(type);
+        return DslNodeType.END.name().equals(type);
     }
 
     /**

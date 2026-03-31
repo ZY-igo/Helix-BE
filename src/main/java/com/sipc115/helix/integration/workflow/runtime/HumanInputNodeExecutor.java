@@ -2,6 +2,7 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.HumanSignalPayload;
 
 /**
@@ -24,7 +25,7 @@ public class HumanInputNodeExecutor implements WorkflowNodeExecutor {
      */
     @Override
     public boolean supports(String type) {
-        return "HUMAN_INPUT".equals(type);
+        return DslNodeType.HUMAN_INPUT.name().equals(type);
     }
 
     /**

@@ -3,8 +3,8 @@ package com.sipc115.helix.service;
 
 import com.sipc115.helix.config.BotProperties;
 import com.sipc115.helix.context.BriefingPromptBuilder;
-import com.sipc115.helix.integration.ai.AiClient;
-import com.sipc115.helix.integration.ai.AiClientFactory;
+import com.sipc115.helix.integration.llm.AiClient;
+import com.sipc115.helix.integration.llm.AiClientFactory;
 import com.sipc115.helix.domain.dto.DailyBriefing;
 import com.sipc115.helix.repository.es.AiDailyReportRepository;
 import java.time.LocalDate;

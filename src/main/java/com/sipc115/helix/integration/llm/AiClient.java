@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.ai;
+package com.sipc115.helix.integration.llm;
 
 /**
  * AI 客户端统一接口
