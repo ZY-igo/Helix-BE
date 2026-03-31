@@ -15,6 +15,14 @@ spring:
     uris:
       - http://192.168.115.23:9200
 
+# Temporal 配置
+temporal:
+  namespace: default
+  connection:
+    target: 192.168.115.23:7233
+  demo:
+    task-queue: helix-demo-queue
+
 app:
   zhipu:
     base-url: https://open.bigmodel.cn/api/paas/v4
@@ -39,8 +47,10 @@ app:
     loop-rounds: 2
     audit-loops: 1
     max-items-per-section: 3
+    ai-provider: zhipu
 
 logging:
   level:
     root: INFO
     com.sipc115.helix: INFO
+    io.temporal: INFO

@@ -2,10 +2,41 @@
 -- CREATE DATABASE helix WITH ENCODING 'UTF8';
 -- \c helix
 
--- 2) Daily report status (one row per day)
+-- 2) Task metadata
+DROP TABLE IF EXISTS task;
+CREATE TABLE IF NOT EXISTS task (
+    task_id CHAR(8) PRIMARY KEY,
+    task_intro VARCHAR(1000) NOT NULL,
+    session_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    execution_cycle VARCHAR(255) NOT NULL,
+    password VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO task (task_id, task_intro, session_ids, execution_cycle, password)
+VALUES (1, 'legacy default task', '[]'::jsonb, 'TODO', NULL)
+ON CONFLICT (task_id) DO NOTHING;
+
+-- 3) Prompt definitions
+CREATE TABLE IF NOT EXISTS prompt (
+    id BIGSERIAL PRIMARY KEY,
+    prompt_content TEXT NOT NULL,
+    task_id CHAR(8) NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
+    tag VARCHAR(64) NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_prompt_task_order
+    ON prompt (task_id, tag);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_task_id
+    ON prompt (task_id, tag);
+
+-- 4) Daily report status (one row per task per cycle)
 CREATE TABLE IF NOT EXISTS daily_report_status (
     id BIGSERIAL PRIMARY KEY,
-    report_date DATE NOT NULL UNIQUE,
+    task_id CHAR(8) NOT NULL REFERENCES task(task_id),
+    report_date DATE NOT NULL,
     sent BOOLEAN NOT NULL DEFAULT FALSE,
     es_document_id VARCHAR(128),
     summary_message_id VARCHAR(128),
@@ -15,66 +46,5 @@ CREATE TABLE IF NOT EXISTS daily_report_status (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_daily_report_status_report_date
-    ON daily_report_status (report_date DESC);
-
--- 3) Trusted whitelist sources (AI should prioritize these domains)
-CREATE TABLE IF NOT EXISTS trusted_source_whitelist (
-    id BIGSERIAL PRIMARY KEY,
-    domain VARCHAR(255) NOT NULL UNIQUE,
-    source_name VARCHAR(255) NOT NULL,
-    source_type VARCHAR(32) NOT NULL DEFAULT 'official',
-    priority INT NOT NULL DEFAULT 100,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    notes VARCHAR(1000),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_trusted_source_enabled_priority
-    ON trusted_source_whitelist (enabled, priority DESC, domain ASC);
-
--- 4) Run-level trace for each report generation
-CREATE TABLE IF NOT EXISTS daily_report_run (
-    id BIGSERIAL PRIMARY KEY,
-    report_date DATE NOT NULL,
-    run_status VARCHAR(32) NOT NULL,
-    rounds_planned INT NOT NULL,
-    rounds_executed INT NOT NULL DEFAULT 0,
-    final_score INT,
-    model_name VARCHAR(128),
-    started_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    finished_at TIMESTAMP,
-    error_message VARCHAR(1200)
-);
-
-CREATE INDEX IF NOT EXISTS idx_daily_report_run_report_date
-    ON daily_report_run (report_date DESC, started_at DESC);
-
--- 5) Round-level trace for quality optimization loop
-CREATE TABLE IF NOT EXISTS daily_report_round_trace (
-    id BIGSERIAL PRIMARY KEY,
-    run_id BIGINT NOT NULL REFERENCES daily_report_run(id) ON DELETE CASCADE,
-    round_no INT NOT NULL,
-    stage VARCHAR(32) NOT NULL, -- retrieve/optimize/format/audit
-    score INT,
-    prompt_text TEXT,
-    output_text TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_round_trace_run_round
-    ON daily_report_round_trace (run_id, round_no);
-
--- 6) Optional: seed trusted domains
-INSERT INTO trusted_source_whitelist (domain, source_name, source_type, priority, enabled, notes)
-VALUES
-    ('platform.openai.com', 'OpenAI Platform', 'official', 100, TRUE, 'default seed'),
-    ('ai.google.dev', 'Google AI Developers', 'official', 99, TRUE, 'default seed'),
-    ('docs.anthropic.com', 'Anthropic Docs', 'official', 98, TRUE, 'default seed'),
-    ('huggingface.co', 'Hugging Face', 'official', 97, TRUE, 'default seed'),
-    ('github.com', 'GitHub', 'official', 96, TRUE, 'default seed'),
-    ('info.arxiv.org', 'arXiv API', 'official', 95, TRUE, 'default seed'),
-    ('arxiv.org', 'arXiv', 'official', 94, TRUE, 'default seed'),
-    ('semanticscholar.org', 'Semantic Scholar', 'official', 93, TRUE, 'default seed')
-ON CONFLICT (domain) DO NOTHING;
+ALTER TABLE daily_report_status
+    ADD COLUMN IF NOT EXISTS task_id BIGINT;

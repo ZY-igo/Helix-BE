@@ -2,11 +2,11 @@ package com.sipc115.helix.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sipc115.helix.config.FeishuClient;
+import com.sipc115.helix.integration.lark.FeishuClient;
 import com.sipc115.helix.context.BriefingFormatter;
-import com.sipc115.helix.model.dto.DailyBriefing;
-import com.sipc115.helix.model.entity.DailyReportStatus;
-import com.sipc115.helix.model.es.AiDailyReportDocument;
+import com.sipc115.helix.domain.dto.DailyBriefing;
+import com.sipc115.helix.domain.entity.DailyReportStatus;
+import com.sipc115.helix.domain.es.AiDailyReportDocument;
 import com.sipc115.helix.repository.es.AiDailyReportRepository;
 import com.sipc115.helix.repository.jpa.DailyReportStatusRepository;
 import java.time.Instant;
@@ -18,18 +18,63 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 日报流水线服务
+ * <p>
+ * 负责日报的生成、格式化、存储和发送整个流程
+ * </p>
+ * 
+ * @author system
+ * @since 1.0.0
+ */
 @Service
 public class DailyReportPipelineService {
 
+    /**
+     * 日志记录器
+     */
     private static final Logger log = LoggerFactory.getLogger(DailyReportPipelineService.class);
 
+    /**
+     * 日报状态仓库
+     */
     private final DailyReportStatusRepository statusRepository;
+    
+    /**
+     * AI日报报告仓库
+     */
     private final AiDailyReportRepository reportRepository;
+    
+    /**
+     * 智谱简报服务
+     */
     private final ZhipuBriefingService zhipuBriefingService;
+    
+    /**
+     * 简报格式化器
+     */
     private final BriefingFormatter briefingFormatter;
+    
+    /**
+     * 飞书客户端
+     */
     private final FeishuClient feishuClient;
+    
+    /**
+     * Jackson对象映射器
+     */
     private final ObjectMapper objectMapper;
 
+    /**
+     * 构造函数
+     * 
+     * @param statusRepository 日报状态仓库
+     * @param reportRepository AI日报报告仓库
+     * @param zhipuBriefingService 智谱简报服务
+     * @param briefingFormatter 简报格式化器
+     * @param feishuClient 飞书客户端
+     * @param objectMapper Jackson对象映射器
+     */
     public DailyReportPipelineService(
             DailyReportStatusRepository statusRepository,
             AiDailyReportRepository reportRepository,
@@ -45,10 +90,21 @@ public class DailyReportPipelineService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 运行日报流水线
+     * <p>
+     * 生成日报、格式化、存储到Elasticsearch、发送到飞书
+     * </p>
+     * 
+     * @param date 报告日期
+     * @param force 是否强制运行
+     * @return 日报状态
+     */
     @Transactional
     public DailyReportStatus run(LocalDate date, boolean force) {
         log.info("[Pipeline] Start run. date={}, force={}, next=load status row, remaining=5 steps", date, force);
-        DailyReportStatus status = statusRepository.findByReportDate(date).orElseGet(DailyReportStatus::new);
+        DailyReportStatus status = statusRepository.findByTaskIdAndReportDate("1", date).orElseGet(DailyReportStatus::new);
+        status.setTaskId("1");
         status.setReportDate(date);
 
         if (!force && status.isSent()) {
@@ -123,20 +179,44 @@ public class DailyReportPipelineService {
         }
     }
 
+    /**
+     * 搜索日报
+     * 
+     * @param keyword 搜索关键词
+     * @return 匹配的日报列表
+     */
     public List<AiDailyReportDocument> search(String keyword) {
         return reportRepository.findTop5BySummaryTextContainingOrDetailTextContainingOrderByCreatedAtDesc(keyword, keyword);
     }
 
+    /**
+     * 查询指定日期的日报
+     * 
+     * @param date 报告日期
+     * @return 匹配的日报列表
+     */
     public List<AiDailyReportDocument> queryToday(LocalDate date) {
         return reportRepository.findTop5ByReportDateOrderByCreatedAtDesc(date);
     }
 
+    /**
+     * 检查是否没有源更新
+     * 
+     * @param briefing 简报对象
+     * @return 是否没有源更新
+     */
     private boolean isNoSourceUpdate(DailyBriefing briefing) {
         return briefing.getHotSignals().isEmpty()
                 && briefing.getLatestUpdates().isEmpty()
                 && briefing.getClassicInsights().isEmpty();
     }
 
+    /**
+     * 构建无更新消息
+     * 
+     * @param date 报告日期
+     * @return 无更新消息
+     */
     private String buildNoUpdateMessage(LocalDate date) {
         return "[AI Daily Report] " + date + " no high-value source update today. No new content pushed.";
     }

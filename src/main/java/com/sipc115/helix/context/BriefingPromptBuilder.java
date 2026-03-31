@@ -3,9 +3,25 @@ package com.sipc115.helix.context;
 import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 
+/**
+ * 简报提示词构建器
+ * <p>
+ * 负责构建各种简报生成相关的提示词
+ * </p>
+ * 
+ * @author system
+ * @since 1.0.0
+ */
 @Component
 public class BriefingPromptBuilder {
 
+    /**
+     * 构建系统提示词
+     * 
+     * @param date 日期
+     * @param maxItemsPerSection 每个部分的最大项目数
+     * @return 系统提示词
+     */
     public String buildSystemPrompt(LocalDate date, int maxItemsPerSection) {
         return """
                 You are an AI engineering editor for a software development team.
@@ -30,6 +46,12 @@ public class BriefingPromptBuilder {
                 """.formatted(date, maxItemsPerSection);
     }
 
+    /**
+     * 构建检索提示词
+     * 
+     * @param date 日期
+     * @return 检索提示词
+     */
     public String buildRetrievePrompt(LocalDate date) {
         return """
                 Task: Build today's developer-oriented AI briefing in exactly 3 sections:
@@ -55,6 +77,13 @@ public class BriefingPromptBuilder {
                 """.formatted(date);
     }
 
+    /**
+     * 构建优化提示词
+     * 
+     * @param round 优化轮次
+     * @param previousJson 之前的JSON
+     * @return 优化提示词
+     */
     public String buildOptimizePrompt(int round, String previousJson) {
         return """
                 Optimization round %d:
@@ -70,6 +99,12 @@ public class BriefingPromptBuilder {
                 """.formatted(round, previousJson);
     }
 
+    /**
+     * 构建格式化提示词
+     * 
+     * @param optimizedJson 优化后的JSON
+     * @return 格式化提示词
+     */
     public String buildFormattingPrompt(String optimizedJson) {
         return """
                 Normalize the JSON below:
@@ -83,6 +118,13 @@ public class BriefingPromptBuilder {
                 """.formatted(optimizedJson);
     }
 
+    /**
+     * 构建去重提示词
+     * 
+     * @param candidateJson 候选JSON
+     * @param duplicatedUrls 重复的URL列表
+     * @return 去重提示词
+     */
     public String buildDeduplicatePrompt(String candidateJson, java.util.List<String> duplicatedUrls) {
         return """
                 Deduplication task:
@@ -99,6 +141,12 @@ public class BriefingPromptBuilder {
                 """.formatted(String.join("\n", duplicatedUrls), candidateJson);
     }
 
+    /**
+     * 构建质量审计提示词
+     * 
+     * @param candidateJson 候选JSON
+     * @return 质量审计提示词
+     */
     public String buildQualityAuditPrompt(String candidateJson) {
         return """
                 You are a quality auditor.
@@ -123,6 +171,12 @@ public class BriefingPromptBuilder {
                 """.formatted(candidateJson);
     }
 
+    /**
+     * 构建中文翻译提示词
+     * 
+     * @param finalJson 最终JSON
+     * @return 中文翻译提示词
+     */
     public String buildTranslateToChinesePrompt(String finalJson) {
         return """
                 Translation task:
