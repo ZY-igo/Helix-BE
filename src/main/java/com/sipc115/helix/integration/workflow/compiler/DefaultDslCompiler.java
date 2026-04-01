@@ -53,7 +53,7 @@ public class DefaultDslCompiler implements DslCompiler {
     private NodeCompilerRegistry nodeCompilerRegistry;
 
 
-    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
+    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
 
     /**
      * 编译工作流 DSL

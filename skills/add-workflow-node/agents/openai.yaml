@@ -1,0 +1,5 @@
+interface:
+  display_name: "Add Workflow Node"
+  short_description: "Guide Codex to add a workflow node to Helix's DSL compiler and runtime."
+  default_prompt: "Use $add-workflow-node to add a new workflow node to the Helix workflow framework."
+

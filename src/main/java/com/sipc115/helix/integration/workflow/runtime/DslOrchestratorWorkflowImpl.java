@@ -59,24 +59,6 @@ public class DslOrchestratorWorkflowImpl {
     }
 
     /**
-     * 创建 Activity 存根
-     * <p>
-     * 配置活动的超时时间和重试策略。
-     * 
-     * @return ActivityTaskRouterActivity 存根
-     */
-    private ActivityTaskRouterActivity createActivityStub() {
-        return Workflow.newActivityStub(
-                ActivityTaskRouterActivity.class,
-                ActivityOptions.newBuilder()
-                        .setStartToCloseTimeout(Duration.ofMinutes(5))  // 活动超时时间：5 分钟
-                        .setRetryOptions(RetryOptions.newBuilder()
-                                .setMaximumAttempts(3)  // 最大重试次数：3 次
-                                .build())
-                        .build());
-    }
-
-    /**
      * 创建工作流运行时桥接
      * <p>
      * 返回 Temporal 特定的运行时桥接实现。
@@ -84,9 +66,7 @@ public class DslOrchestratorWorkflowImpl {
      * @return Temporal 工作流运行时桥接
      */
     private WorkflowRuntimeBridge createWorkflowRuntimeBridge() {
-        // 创建 Activity 存根，用于调用外部活动（如业务操作、HTTP 请求等）
-        ActivityTaskRouterActivity activityStub = createActivityStub();
-        return new TemporalWorkflowRuntimeBridge(activityStub, bufferedSignals);
+        return new TemporalWorkflowRuntimeBridge( bufferedSignals);
     }
 
     /**

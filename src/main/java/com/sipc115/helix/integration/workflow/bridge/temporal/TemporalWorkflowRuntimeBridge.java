@@ -22,12 +22,6 @@ import java.util.Map;
  * @since 2.0.0
  */
 public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
-    /**
-     * 活动任务路由器活动
-     * <p>
-     * 用于路由和执行外部活动任务。
-     */
-    private final ActivityTaskRouterActivity activityTaskRouterActivity;
 
     /**
      * 缓冲的人工输入信号队列
@@ -40,59 +34,11 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
      * 构造函数
      * <p>
      * 初始化 Temporal 工作流运行时桥接。
-     * 
-     * @param activityTaskRouterActivity 活动任务路由器活动
+     *
      * @param bufferedSignals 人工输入信号缓冲队列
      */
-    public TemporalWorkflowRuntimeBridge(ActivityTaskRouterActivity activityTaskRouterActivity, List<HumanSignalPayload> bufferedSignals) {
-        this.activityTaskRouterActivity = activityTaskRouterActivity;
+    public TemporalWorkflowRuntimeBridge(List<HumanSignalPayload> bufferedSignals) {
         this.bufferedSignals = bufferedSignals;
-    }
-
-    /**
-     * 调用外部活动任务
-     * <p>
-     * 构建活动任务请求并通过活动任务路由器执行。
-     * 
-     * @param node 当前节点的编译后定义
-     * @param input 活动的输入参数
-     * @return 活动执行结果
-     */
-    @Override
-    public Map<String, Object> invokeActivityTask(CompiledNode node, Map<String, Object> input) {
-        ActivityTaskRequest request = new ActivityTaskRequest();
-        request.setAction(node.getAction());      // 设置活动动作标识
-        request.setInput(input);                   // 传递输入参数
-        request.setConfig(node.getConfig());       // 传递节点配置
-        return activityTaskRouterActivity.dispatch(request);
-    }
-
-    /**
-     * 调用子工作流
-     * <p>
-     * 目前为占位实现，后续需要根据节点配置创建和执行子工作流。
-     * 
-     * @param node 当前节点的编译后定义
-     * @param input 子工作流的输入参数
-     * @return 子工作流执行结果
-     */
-    @Override
-    public String invokeChildWorkflow(CompiledNode node, Map<String, Object> input) {
-        // TODO 这里可以按 node.config 中的 workflowType / taskQueue / childOptions 创建子工作流 stub。
-        // 建议把不同子流程抽象成注册表，再由 DSL 节点选择。
-        return "TODO_CHILD_WORKFLOW_RESULT";
-    }
-
-    /**
-     * 持久化休眠
-     * <p>
-     * 使用 Temporal 提供的可靠定时功能，即使 Worker 重启，休眠也会在恢复后继续计时。
-     * 
-     * @param duration 休眠时长
-     */
-    @Override
-    public void durableSleep(Duration duration) {
-        Workflow.sleep(duration);
     }
 
     /**
