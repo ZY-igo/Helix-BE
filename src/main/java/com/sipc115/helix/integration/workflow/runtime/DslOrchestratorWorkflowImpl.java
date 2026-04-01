@@ -2,13 +2,9 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.*;
-import com.sipc115.helix.integration.workflow.bridge.temporal.activity.ActivityTaskRouterActivity;
+import com.sipc115.helix.integration.lark.FeishuClient;
 import com.sipc115.helix.integration.workflow.bridge.temporal.TemporalWorkflowRuntimeBridge;
-import io.temporal.activity.ActivityOptions;
-import io.temporal.common.RetryOptions;
-import io.temporal.workflow.Workflow;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +26,7 @@ public class DslOrchestratorWorkflowImpl {
      */
     private final List<HumanSignalPayload> bufferedSignals = new ArrayList<>();
 
+    private transient FeishuClient feishuClient;
     /**
      * 无参构造函数
      * <p>
@@ -66,7 +63,7 @@ public class DslOrchestratorWorkflowImpl {
      * @return Temporal 工作流运行时桥接
      */
     private WorkflowRuntimeBridge createWorkflowRuntimeBridge() {
-        return new TemporalWorkflowRuntimeBridge( bufferedSignals);
+        return new TemporalWorkflowRuntimeBridge(bufferedSignals, feishuClient);
     }
 
     /**

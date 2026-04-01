@@ -13,7 +13,8 @@ public enum DslNodeType {
     END("end"),
     CONDITION("condition"),
     HUMAN_INPUT("human_input"),
-    AI_TASK("ai_task");
+    AI_TASK("ai_task"),
+    FEISHU_NOTIFICATION("feishu_notification");
     
     private final String value;
     
