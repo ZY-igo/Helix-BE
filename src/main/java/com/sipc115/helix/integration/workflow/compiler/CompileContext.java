@@ -3,6 +3,7 @@ package com.sipc115.helix.integration.workflow.compiler;
 
 import com.sipc115.helix.expression.ExpressionEngine;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
+import lombok.Getter;
 
 import java.util.Map;
 import java.util.Set;
@@ -15,12 +16,18 @@ import java.util.Set;
  * @author Helix Team
  * @since 2.0.0
  */
+@Getter
 public class CompileContext {
     
     /**
      * 表达式引擎
      * <p>
      * 用于编译和执行条件表达式。
+     * -- GETTER --
+     *  获取表达式引擎
+     *
+     * @return 表达式引擎
+
      */
     private final ExpressionEngine expressionEngine;
     
@@ -28,6 +35,11 @@ public class CompileContext {
      * 工作流元数据
      * <p>
      * 包含工作流的全局配置和信息。
+     * -- GETTER --
+     *  获取工作流元数据
+     *
+     * @return 工作流元数据
+
      */
     private final Map<String, Object> workflowMeta;
     
@@ -35,6 +47,11 @@ public class CompileContext {
      * 节点索引
      * <p>
      * 节点 ID 到节点规范的映射，用于快速查找节点。
+     * -- GETTER --
+     *  获取节点索引
+     *
+     * @return 节点索引
+
      */
     private final Map<String, DslNodeSpec> nodeIndex;
     
@@ -42,6 +59,11 @@ public class CompileContext {
      * 已声明的变量
      * <p>
      * 工作流中已声明的所有变量，用于验证变量引用的合法性。
+     * -- GETTER --
+     *  获取已声明的变量
+     *
+     * @return 已声明的变量集合
+
      */
     private final Set<String> declaredVariables;
     
@@ -63,43 +85,7 @@ public class CompileContext {
         this.nodeIndex = nodeIndex;
         this.declaredVariables = declaredVariables;
     }
-    
-    /**
-     * 获取表达式引擎
-     * 
-     * @return 表达式引擎
-     */
-    public ExpressionEngine getExpressionEngine() {
-        return expressionEngine;
-    }
-    
-    /**
-     * 获取工作流元数据
-     * 
-     * @return 工作流元数据
-     */
-    public Map<String, Object> getWorkflowMeta() {
-        return workflowMeta;
-    }
-    
-    /**
-     * 获取节点索引
-     * 
-     * @return 节点索引
-     */
-    public Map<String, DslNodeSpec> getNodeIndex() {
-        return nodeIndex;
-    }
-    
-    /**
-     * 获取已声明的变量
-     * 
-     * @return 已声明的变量集合
-     */
-    public Set<String> getDeclaredVariables() {
-        return declaredVariables;
-    }
-    
+
     /**
      * 检查变量是否已声明
      * 

@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.workflow.temporal.activity;
+package com.sipc115.helix.integration.workflow.bridge.temporal.activity;
 
 import com.sipc115.helix.domain.workflow.ActivityTaskRequest;
 import io.temporal.activity.ActivityInterface;

@@ -11,12 +11,8 @@ package com.sipc115.helix.domain.workflow;
 public enum DslNodeType {
     START("start"),
     END("end"),
-    ACTIVITY("activity"),
     CONDITION("condition"),
-    DELAY("delay"),
     HUMAN_INPUT("human_input"),
-    CHILD_WORKFLOW("child_workflow"),
-    TRANSFORM("transform"),
     AI_TASK("ai_task");
     
     private final String value;

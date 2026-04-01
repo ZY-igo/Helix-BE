@@ -2,8 +2,8 @@
 package com.sipc115.helix.config;
 
 import com.sipc115.helix.integration.workflow.service.WorkflowExecutionApplicationService;
-import com.sipc115.helix.integration.workflow.temporal.activity.ActivityTaskRouterActivityImpl;
-import com.sipc115.helix.integration.workflow.temporal.workflow.DslOrchestratorWorkflowImpl;
+import com.sipc115.helix.integration.workflow.bridge.temporal.activity.ActivityTaskRouterActivityImpl;
+import com.sipc115.helix.integration.workflow.runtime.DslOrchestratorWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.worker.Worker;

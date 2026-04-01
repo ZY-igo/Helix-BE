@@ -54,31 +54,39 @@ public class ConditionNodeCompiler implements NodeCompiler {
         CompiledNode node = new CompiledNode();
         node.setId(source.getId());
         node.setType(source.getType());
+        node.setAction("CONDITION");
         
-        Map<String, Object> config = source.getConfig();
-        String conditionStr = (String) config.get("condition");
+        // 复制原始配置
+        Map<String, Object> compiledConfig = source.getConfig() != null
+            ? new java.util.HashMap<>(source.getConfig())
+            : new java.util.HashMap<>();
         
-        try {
-            // 验证表达式语法
-            context.getExpressionEngine().validateExpression(conditionStr);
-            
-            // 归一化表达式
-            String normalizedCondition = normalizeExpression(conditionStr);
-            config.put("condition", normalizedCondition);
-            
-            // 编译表达式并存储编译后的对象
-            CompiledExpression compiledExpr = context.getExpressionEngine().compile(normalizedCondition);
-            config.put("compiledExpression", compiledExpr);
-            config.put("compiled", true);
-            config.put("expressionLanguage", context.getExpressionEngine().getEngineName());
-            
-            logger.debug("Compiled condition expression for node {}: {}", source.getId(), normalizedCondition);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid condition expression for CONDITION node " + source.getId() + ": " + e.getMessage());
+        // 在这里编译条件表达式
+        Object condition = compiledConfig.get("condition");
+        if (condition instanceof String) {
+            try {
+                String conditionStr = (String) condition;
+                
+                // 验证表达式语法
+                context.getExpressionEngine().validateExpression(conditionStr);
+                
+                // 归一化表达式
+                String normalizedCondition = normalizeExpression(conditionStr);
+                compiledConfig.put("condition", normalizedCondition);
+                
+                // 编译表达式并存储编译后的对象
+                CompiledExpression compiledExpr = context.getExpressionEngine().compile(normalizedCondition);
+                compiledConfig.put("compiledExpression", compiledExpr);
+                compiledConfig.put("compiled", true);
+                compiledConfig.put("expressionLanguage", context.getExpressionEngine().getEngineName());
+                
+                logger.debug("Compiled condition expression for node {}: {}", source.getId(), normalizedCondition);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid condition expression for node " + source.getId() + ": " + e.getMessage(), e);
+            }
         }
         
-        node.setConfig(config);
-        node.setAction("CONDITION");
+        node.setConfig(compiledConfig);
         return node;
     }
     

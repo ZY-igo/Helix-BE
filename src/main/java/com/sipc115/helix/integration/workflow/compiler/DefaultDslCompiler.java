@@ -73,13 +73,8 @@ public class DefaultDslCompiler implements DslCompiler {
             logger.debug("Validating DSL for workflow: {}", dsl.getWorkflowId());
             validateDsl(dsl);
             logger.debug("DSL validation completed successfully");
-            
-            // 2. 编译条件表达式
-            logger.debug("Compiling expressions for workflow: {}", dsl.getWorkflowId());
-            compileExpressions(dsl);
-            logger.debug("Expression compilation completed successfully");
 
-            // 3. 构建编译上下文
+            // 2. 构建编译上下文
             CompileContext context = buildCompileContext(dsl);
             
             // 4. 创建执行计划对象
@@ -424,86 +419,7 @@ public class DefaultDslCompiler implements DslCompiler {
         return variables;
     }
 
-    /**
-     * 编译条件表达式
-     * <p>
-     * 对 DSL 中的条件表达式进行编译和归一化处理，确保表达式的语法正确并可执行。
-     * 注意：边的 conditionKey 是分支标识符（如 "true"、"false"、"default"），不是表达式，不需要编译。
-     * 
-     * @param dsl 工作流 DSL 对象
-     * @throws IllegalArgumentException 当条件表达式语法错误时抛出
-     */
-    private void compileExpressions(WorkflowDsl dsl) {
-        // 注意：不处理边的 conditionKey，因为它是分支标识符，不是表达式
-        // 边的 conditionKey 用于 TransitionResolver 中的路径选择，如 "true"、"false"、"default" 等
-        
-        // 遍历所有节点，处理节点中的条件表达式（如 CONDITION 节点的条件）
-        for (DslNodeSpec node : dsl.getNodes()) {
-            if (node.getConfig() != null) {
-                // 处理节点配置中的条件表达式
-                processNodeExpressions(node);
-            }
-        }
-    }
-    
-    /**
-     * 归一化表达式
-     * <p>
-     * 对表达式进行标准化处理，移除多余的空格，确保表达式格式一致。
-     * 
-     * @param expression 原始表达式
-     * @return 归一化后的表达式
-     */
-    private String normalizeExpression(String expression) {
-        // 移除多余的空格，保留必要的空格
-        return expression.trim().replaceAll("\\s+  ", " ");
-    }
-    
-    /**
-     * 处理节点中的表达式
-     * <p>
-     * 处理节点配置中的各种表达式，如 CONDITION 节点的条件表达式。
-     * 编译表达式并将编译后的表达式对象存储到配置中，供运行时直接使用。
-     * 
-     * @param node DSL 节点规范
-     * @throws IllegalArgumentException 当节点表达式语法错误时抛出
-     */
-    private void processNodeExpressions(DslNodeSpec node) {
-        Map<String, Object> config = node.getConfig();
-        if (config == null) {
-            return;
-        }
-        
-        // 处理 CONDITION 节点的条件表达式
-        if (node.getType() == DslNodeType.CONDITION) {
-            Object condition = config.get("condition");
-            if (condition != null && condition instanceof String) {
-                try {
-                    String conditionStr = (String) condition;
-                    
-                    // 验证表达式语法
-                    expressionEngine.validateExpression(conditionStr);
-                    
-                    // 归一化表达式
-                    String normalizedCondition = normalizeExpression(conditionStr);
-                    config.put("condition", normalizedCondition);
-                    
-                    // 编译表达式并存储编译后的对象
-                    CompiledExpression compiledExpr = expressionEngine.compile(normalizedCondition);
-                    config.put("compiledExpression", compiledExpr);
-                    config.put("compiled", true);
-                    config.put("expressionLanguage", expressionEngine.getEngineName());
-                    
-                    logger.debug("Compiled condition expression for node {}: {}", node.getId(), normalizedCondition);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Invalid condition expression for CONDITION node " + node.getId() + ": " + e.getMessage());
-                }
-            }
-        }
-        
-        // 处理其他类型节点的表达式（如果有）
-        // TODO: 扩展其他节点类型的表达式处理
-    }
+
 
     /**
      * 查找入口节点 ID

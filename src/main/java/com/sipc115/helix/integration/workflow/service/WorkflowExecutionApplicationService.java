@@ -6,7 +6,7 @@ import com.sipc115.helix.domain.workflow.HumanSignalPayload;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionRequest;
 import com.sipc115.helix.domain.workflow.WorkflowStateView;
 import com.sipc115.helix.integration.workflow.port.ExecutionPlanRepository;
-import com.sipc115.helix.integration.workflow.runtime.DslOrchestratorWorkflow;
+import com.sipc115.helix.integration.workflow.runtime.DslOrchestratorWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
@@ -95,7 +95,7 @@ public class WorkflowExecutionApplicationService {
 
         // 创建工作流存根
         // 使用工作流客户端创建 DslOrchestratorWorkflow 类型的工作流存根
-        DslOrchestratorWorkflow workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflow.class, options);
+        DslOrchestratorWorkflowImpl workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflowImpl.class, options);
 
         // 异步启动工作流
         // 传入执行计划和输入参数，工作流将在后台异步执行
@@ -115,7 +115,7 @@ public class WorkflowExecutionApplicationService {
     public void signalHumanInput(String workflowId, HumanSignalPayload payload) {
         // 根据工作流 ID 获取工作流存根
         // 使用工作流客户端创建 DslOrchestratorWorkflow 类型的工作流存根
-        DslOrchestratorWorkflow workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflow.class, workflowId);
+        DslOrchestratorWorkflowImpl workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflowImpl.class, workflowId);
 
         // 向工作流发送人工输入信号
         // 调用工作流的 provideHumanInput 方法，传递人工输入数据
@@ -133,7 +133,7 @@ public class WorkflowExecutionApplicationService {
     public WorkflowStateView queryState(String workflowId) {
         // 根据工作流 ID 获取工作流存根
         // 使用工作流客户端创建 DslOrchestratorWorkflow 类型的工作流存根
-        DslOrchestratorWorkflow workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflow.class, workflowId);
+        DslOrchestratorWorkflowImpl workflow = workflowClient.newWorkflowStub(DslOrchestratorWorkflowImpl.class, workflowId);
 
         // 查询工作流当前状态
         // 调用工作流的 currentState 方法，获取并返回当前状态
@@ -153,6 +153,6 @@ public class WorkflowExecutionApplicationService {
         // 1. 首先创建 DslOrchestratorWorkflow 类型的工作流存根
         // 2. 将其转换为通用的 WorkflowStub
         // 3. 调用 cancel 方法取消工作流
-        WorkflowStub.fromTyped(workflowClient.newWorkflowStub(DslOrchestratorWorkflow.class, workflowId)).cancel();
+        WorkflowStub.fromTyped(workflowClient.newWorkflowStub(DslOrchestratorWorkflowImpl.class, workflowId)).cancel();
     }
 }
