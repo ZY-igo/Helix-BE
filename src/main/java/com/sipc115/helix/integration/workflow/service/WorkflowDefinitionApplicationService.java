@@ -3,9 +3,11 @@ package com.sipc115.helix.integration.workflow.service;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
-import com.sipc115.helix.integration.workflow.port.DslCompiler;
-import com.sipc115.helix.integration.workflow.port.DslRepository;
-import com.sipc115.helix.integration.workflow.port.ExecutionPlanRepository;
+import com.sipc115.helix.integration.workflow.spi.DslCompiler;
+import com.sipc115.helix.integration.workflow.spi.DslRepository;
+import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,68 +15,96 @@ import org.springframework.stereotype.Service;
  * <p>
  * 负责工作流定义的保存和编译，将工作流 DSL 转换为可执行的执行计划。
  * 实现了工作流定义的完整生命周期管理，从保存到编译再到存储执行计划。
- * 
+ *
  * @author Helix Team
  * @since 2.0.0
  */
 @Service
 public class WorkflowDefinitionApplicationService {
-    /**
-     * DSL 存储库
-     * <p>
-     * 用于存储和检索工作流 DSL 定义。
-     */
     private final DslRepository dslRepository;
-    
-    /**
-     * DSL 编译器
-     * <p>
-     * 用于将工作流 DSL 编译为执行计划。
-     */
+
     private final DslCompiler dslCompiler;
-    
-    /**
-     * 执行计划存储库
-     * <p>
-     * 用于存储和检索编译后的执行计划。
-     */
+
     private final ExecutionPlanRepository executionPlanRepository;
+
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowDefinitionApplicationService.class);
+
+    // ⭐ 新增：注入持久化服务（解耦的核心）
+    private final WorkflowPersistenceService persistenceService;
 
     /**
      * 构造函数
      * <p>
      * 通过依赖注入获取所需的存储库和编译器实例。
-     * 
+     *
      * @param dslRepository DSL 存储库
      * @param dslCompiler DSL 编译器
      * @param executionPlanRepository 执行计划存储库
+     * @param persistenceService 工作流持久化服务
      */
     public WorkflowDefinitionApplicationService(DslRepository dslRepository,
                                                 DslCompiler dslCompiler,
-                                                ExecutionPlanRepository executionPlanRepository) {
+                                                ExecutionPlanRepository executionPlanRepository,
+                                                WorkflowPersistenceService persistenceService) {
         this.dslRepository = dslRepository;
         this.dslCompiler = dslCompiler;
         this.executionPlanRepository = executionPlanRepository;
+        this.persistenceService = persistenceService;
     }
 
     /**
      * 保存并编译工作流 DSL
      * <p>
      * 将工作流 DSL 保存到存储库，然后编译为执行计划，并将执行计划保存到存储库。
-     * 
+     *
      * @param dsl 工作流 DSL 对象
      * @return 编译后的执行计划
      */
     public ExecutionPlan saveAndCompile(WorkflowDsl dsl) {
-        // 保存 DSL 到存储库
+        // ① 保存 DSL 到内存仓库（保持向后兼容）
         dslRepository.save(dsl);
-        
-        // 编译 DSL 为执行计划
+
+        // ② 编译 DSL 为执行计划
         ExecutionPlan plan = dslCompiler.compile(dsl);
-        
-        // 保存执行计划到存储库
+
+        // ⭐ ③ 生成 planId（如果编译器没有生成）
+        if (plan.getPlanId() == null || plan.getPlanId().isEmpty()) {
+            String planId = dsl.getWorkflowId() + "-v" + dsl.getVersion() + "-" + System.currentTimeMillis();
+            plan.setPlanId(planId);
+        }
+
+        // ④ 保存执行计划到内存仓库（保持向后兼容）
         executionPlanRepository.save(plan);
-        
+
+        // ⭐ ⑤ 【新增】持久化到数据库（解耦的核心逻辑）
+        persistToDatabase(dsl, plan);
+
         return plan;
+    }
+
+    /**
+     * 持久化到数据库
+     * <p>
+     * 将 DSL 和执行计划分别保存到 PostgreSQL 数据库。
+     * 该方法独立于业务逻辑，只负责数据存储。
+     *
+     * @param dsl 工作流 DSL 对象
+     * @param plan 执行计划对象
+     */
+    private void persistToDatabase(WorkflowDsl dsl, ExecutionPlan plan) {
+        try {
+            // 保存 DSL
+            persistenceService.saveDsl(dsl);
+
+            // 保存执行计划
+            persistenceService.saveExecutionPlan(plan);
+
+            logger.info("✅ 工作流定义已成功持久化到数据库。workflowId={}, version={}",
+                       dsl.getWorkflowId(), dsl.getVersion());
+        } catch (Exception e) {
+            logger.error("❌ 数据库持久化失败，但内存存储仍然有效。workflowId={}, version={}",
+                        dsl.getWorkflowId(), dsl.getVersion(), e);
+            // 注意：这里不抛出异常，保证向后兼容（即使 DB 失败，内存仍可用）
+        }
     }
 }

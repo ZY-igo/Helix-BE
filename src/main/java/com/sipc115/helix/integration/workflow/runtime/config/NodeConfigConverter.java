@@ -3,15 +3,13 @@ package com.sipc115.helix.integration.workflow.runtime.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.domain.workflow.DslNodeType;
-import com.sipc115.helix.context.node.condition.ConditionNodeConfig;
-import com.sipc115.helix.context.node.end.EndNodeConfig;
-import com.sipc115.helix.context.node.humanInput.HumanInputNodeConfig;
-import com.sipc115.helix.context.node.start.StartNodeConfig;
+import com.sipc115.helix.integration.workflow.node.condition.ConditionNodeConfig;
+import com.sipc115.helix.integration.workflow.node.end.EndNodeConfig;
+import com.sipc115.helix.integration.workflow.node.humanInput.HumanInputNodeConfig;
+import com.sipc115.helix.integration.workflow.node.start.StartNodeConfig;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-
-import static com.sipc115.helix.domain.workflow.DslNodeType.END;
 
 /**
  * 节点配置转换器

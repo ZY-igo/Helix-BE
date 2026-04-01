@@ -2,7 +2,7 @@
 package com.sipc115.helix.integration.workflow.repository;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
-import com.sipc115.helix.integration.workflow.port.ExecutionPlanRepository;
+import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;

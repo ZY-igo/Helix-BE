@@ -2,7 +2,7 @@
 package com.sipc115.helix.integration.workflow.repository;
 
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
-import com.sipc115.helix.integration.workflow.port.DslRepository;
+import com.sipc115.helix.integration.workflow.spi.DslRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
