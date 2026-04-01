@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.context.node.ai.config;
+package com.sipc115.helix.context.node.agent.config;
 
 import lombok.Data;
 import java.util.List;

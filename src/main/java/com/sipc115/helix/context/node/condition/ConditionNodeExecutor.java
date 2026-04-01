@@ -4,6 +4,8 @@ package com.sipc115.helix.context.node.condition;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.integration.workflow.runtime.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * 条件节点执行器
@@ -14,6 +16,7 @@ import com.sipc115.helix.integration.workflow.runtime.*;
  * @author Helix Team
  * @since 2.0.0
  */
+@Component
 public class ConditionNodeExecutor implements WorkflowNodeExecutor {
     /**
      * 转换解析器
@@ -29,6 +32,7 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
      * 
      * @param transitionResolver 转换解析器
      */
+    @Autowired
     public ConditionNodeExecutor(TransitionResolver transitionResolver) {
         this.transitionResolver = transitionResolver;
     }

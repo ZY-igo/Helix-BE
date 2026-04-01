@@ -1,9 +1,16 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.context.node.ai.compiler;
+package com.sipc115.helix.context.node.agent;
 
-import com.sipc115.helix.context.node.ai.config.*;
+import com.sipc115.helix.context.node.agent.config.*;
+import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.domain.workflow.DslNodeSpec;
+import com.sipc115.helix.domain.workflow.DslNodeType;
+import com.sipc115.helix.integration.workflow.compiler.CompileContext;
+import com.sipc115.helix.integration.workflow.compiler.NodeCompiler;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -11,11 +18,76 @@ import java.util.Map;
  * AI 任务编译器类
  * <p>
  * 将 DSL 配置编译成可执行的 AI 任务配置对象。
+ * 实现了 NodeCompiler 接口，支持 SPI 架构的自动注册机制。
  * 
  * @author Helix Team
  * @since 2.0.0
  */
-public class AiTaskCompiler {
+@Component
+public class AiTaskCompiler implements NodeCompiler {
+
+    /**
+     * 支持的节点类型
+     * 
+     * @return AI_TASK 类型
+     */
+    @Override
+    public DslNodeType supportType() {
+        return DslNodeType.AI_TASK;
+    }
+
+    /**
+     * 验证 AI 任务节点配置
+     * 
+     * @param source DSL 节点规范
+     * @param context 编译上下文
+     * @throws IllegalArgumentException 当配置不合法时抛出
+     */
+    @Override
+    public void validate(DslNodeSpec source, CompileContext context) {
+        Map<String, Object> config = source.getConfig();
+        if (config == null) {
+            throw new IllegalArgumentException("AI task node must have config: " + source.getId());
+        }
+        
+        // 检查必需的 flow 配置
+        Object flow = config.get("flow");
+        if (flow == null || !(flow instanceof List)) {
+            throw new IllegalArgumentException("AI task node must have a flow configuration: " + source.getId());
+        }
+        
+        List<?> flowList = (List<?>) flow;
+        if (flowList.isEmpty()) {
+            throw new IllegalArgumentException("AI task flow cannot be empty: " + source.getId());
+        }
+    }
+
+    /**
+     * 编译 AI 任务节点
+     * 
+     * @param source DSL 节点规范
+     * @param context 编译上下文
+     * @return 编译后的节点
+     */
+    @Override
+    public CompiledNode compile(DslNodeSpec source, CompileContext context) {
+        // 使用现有逻辑编译配置
+        AiTaskConfig aiTaskConfig = compile(source.getConfig());
+        
+        // 创建编译后的节点
+        CompiledNode node = new CompiledNode();
+        node.setId(source.getId());
+        node.setType(source.getType());
+        node.setAction("AI_TASK");
+        
+        // 将编译后的配置存入节点 config
+        Map<String, Object> compiledConfig = new HashMap<>();
+        compiledConfig.put("aiTaskConfig", aiTaskConfig);
+        compiledConfig.putAll(source.getConfig());
+        
+        node.setConfig(compiledConfig);
+        return node;
+    }
 
     /**
      * 编译 DSL 配置为 AI 任务配置对象

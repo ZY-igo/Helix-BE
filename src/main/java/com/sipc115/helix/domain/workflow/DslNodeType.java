@@ -16,7 +16,8 @@ public enum DslNodeType {
     DELAY("delay"),
     HUMAN_INPUT("human_input"),
     CHILD_WORKFLOW("child_workflow"),
-    TRANSFORM("transform");
+    TRANSFORM("transform"),
+    AI_TASK("ai_task");
     
     private final String value;
     

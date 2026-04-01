@@ -3,6 +3,7 @@ package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.Transition;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Objects;
@@ -16,6 +17,7 @@ import java.util.Objects;
  * @author Helix Team
  * @since 2.0.0
  */
+@Component
 public class TransitionResolver {
 
     /**

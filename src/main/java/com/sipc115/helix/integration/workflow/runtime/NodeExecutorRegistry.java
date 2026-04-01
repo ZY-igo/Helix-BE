@@ -2,6 +2,9 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.DslNodeType;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,10 +14,12 @@ import java.util.Map;
  * <p>
  * 负责管理和注册不同类型的工作流节点执行器，根据节点类型获取对应的执行器。
  * 支持通过类名和节点类型两种方式注册和获取执行器。
+ * 使用 Spring 依赖注入自动收集所有执行器实现。
  *
  * @author Helix Team
  * @since 2.0.0
  */
+@Component
 public class NodeExecutorRegistry {
     /**
      * 执行器映射
@@ -27,9 +32,11 @@ public class NodeExecutorRegistry {
      * 构造函数
      * <p>
      * 初始化执行器注册表，注册所有提供的执行器实例。
+     * 使用 Spring 依赖注入自动收集所有 WorkflowNodeExecutor 实现。
      *
      * @param executors 工作流节点执行器列表
      */
+    @Autowired
     public NodeExecutorRegistry(List<WorkflowNodeExecutor> executors) {
         // 首先按执行器类名注册
         for (WorkflowNodeExecutor executor : executors) {

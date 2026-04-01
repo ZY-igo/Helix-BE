@@ -7,6 +7,7 @@ import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
+import org.springframework.stereotype.Component;
 
 /**
  * 结束节点执行器
@@ -17,6 +18,7 @@ import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
  * @author Helix Team
  * @since 2.0.0
  */
+@Component
 public class EndNodeExecutor implements WorkflowNodeExecutor {
     /**
      * 检查是否支持指定类型的节点
