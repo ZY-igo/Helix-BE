@@ -2,8 +2,8 @@
 package com.sipc115.helix.integration.workflow.runtime;
 
 import com.sipc115.helix.domain.workflow.*;
-import com.sipc115.helix.integration.lark.FeishuClient;
-import com.sipc115.helix.integration.workflow.bridge.temporal.TemporalWorkflowRuntimeBridge;
+
+import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBridge;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,14 +26,41 @@ public class DslOrchestratorWorkflowImpl {
      */
     private final List<HumanSignalPayload> bufferedSignals = new ArrayList<>();
 
-    private transient FeishuClient feishuClient;
+    /**
+     * 节点执行器注册表
+     * <p>
+     * 用于获取不同类型节点的执行器。
+     */
+    private final NodeExecutorRegistry nodeExecutorRegistry;
+
+    /**
+     * 转换解析器
+     * <p>
+     * 用于根据当前节点和分支结果计算下一个要执行的节点。
+     */
+    private final TransitionResolver transitionResolver;
+
     /**
      * 无参构造函数
      * <p>
      * Temporal 框架需要无参构造函数来创建工作流实例。
+     * 使用默认的注册表和解析器实例。
      */
     public DslOrchestratorWorkflowImpl() {
-        // 无参构造函数
+        this(NodeExecutorRegistryHolder.INSTANCE, TransitionResolverHolder.INSTANCE);
+    }
+
+    /**
+     * 带依赖的构造函数
+     * <p>
+     * 允许注入节点执行器注册表和转换解析器，便于测试和自定义。
+     * 
+     * @param nodeExecutorRegistry 节点执行器注册表
+     * @param transitionResolver 转换解析器
+     */
+    public DslOrchestratorWorkflowImpl(NodeExecutorRegistry nodeExecutorRegistry, TransitionResolver transitionResolver) {
+        this.nodeExecutorRegistry = nodeExecutorRegistry;
+        this.transitionResolver = transitionResolver;
     }
 
     /**
@@ -63,7 +90,7 @@ public class DslOrchestratorWorkflowImpl {
      * @return Temporal 工作流运行时桥接
      */
     private WorkflowRuntimeBridge createWorkflowRuntimeBridge() {
-        return new TemporalWorkflowRuntimeBridge(bufferedSignals, feishuClient);
+        return new TemporalWorkflowRuntimeBridge(bufferedSignals);
     }
 
     /**
@@ -96,7 +123,7 @@ public class DslOrchestratorWorkflowImpl {
             context.getNodeStatuses().put(currentNodeId, ExecutionStatus.RUNNING);
 
             // 根据节点类型从注册表中获取对应的执行器
-            WorkflowNodeExecutor executor = WorkflowExecutors.REGISTRY.get(node.getType().name());
+            WorkflowNodeExecutor executor = nodeExecutorRegistry.get(node.getType().name());
 
             // 执行节点逻辑，获取执行结果
             NodeExecutionResult result = executor.execute(node, context, bridge);
@@ -121,7 +148,7 @@ public class DslOrchestratorWorkflowImpl {
             // 优先使用执行结果中直接指定的 nextNodeId，否则通过 TransitionResolver 根据分支结果计算
             currentNodeId = result.getNextNodeId() != null
                     ? result.getNextNodeId()
-                    : WorkflowExecutors.TRANSITION_RESOLVER.nextNode(plan, node.getId(), result.getBranchKey());
+                    : transitionResolver.nextNode(plan, node.getId(), result.getBranchKey());
         }
 
         // 循环结束，工作流执行完成
@@ -177,5 +204,25 @@ public class DslOrchestratorWorkflowImpl {
         WorkflowStateView view = new WorkflowStateView();
         // 由于 Query 可能在 run 前后调用，返回一个最小可用对象。
         return view;
+    }
+
+    /**
+     * 节点执行器注册表持有者
+     * <p>
+     * 使用单例模式持有 NodeExecutorRegistry 实例，
+     * 避免在 Workflow 类中使用静态字段存储 Spring Bean。
+     */
+    private static class NodeExecutorRegistryHolder {
+        static NodeExecutorRegistry INSTANCE = new NodeExecutorRegistry(List.of());
+    }
+
+    /**
+     * 转换解析器持有者
+     * <p>
+     * 使用单例模式持有 TransitionResolver 实例，
+     * 避免在 Workflow 类中使用静态字段存储 Spring Bean。
+     */
+    private static class TransitionResolverHolder {
+        static TransitionResolver INSTANCE = new TransitionResolver();
     }
 }
