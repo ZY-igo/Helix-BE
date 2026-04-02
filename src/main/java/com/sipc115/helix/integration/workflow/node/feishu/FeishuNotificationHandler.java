@@ -13,9 +13,9 @@ import java.util.List;
  * 飞书通知活动实现类
  */
 @Component
-public class FeishuNotificationActivityImpl implements FeishuNotificationActivity {
+public class FeishuNotificationHandler implements FeishuNotificationActivity {
 
-    private static final Logger logger = LoggerFactory.getLogger(FeishuNotificationActivityImpl.class);
+    private static final Logger logger = LoggerFactory.getLogger(FeishuNotificationHandler.class);
 
     @Autowired
     private FeishuClient feishuClient;

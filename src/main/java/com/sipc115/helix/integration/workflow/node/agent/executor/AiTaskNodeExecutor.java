@@ -1,8 +1,11 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent.executor;
 
+import com.sipc115.helix.integration.llm.AiClient;
+import com.sipc115.helix.integration.llm.AiClientFactory;
 import com.sipc115.helix.integration.workflow.node.agent.config.AiFlowStepConfig;
 import com.sipc115.helix.integration.workflow.node.agent.config.AiTaskConfig;
+import com.sipc115.helix.integration.workflow.node.agent.config.LlmConfig;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskState;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace.RoundTrace;
@@ -23,14 +26,18 @@ import java.util.Map;
  */
 public class AiTaskNodeExecutor {
     private final AiStepExecutorRegistry executorRegistry;
+    private final AiClientFactory aiClientFactory;
 
     /**
      * 构造函数
      * <p>
-     * 初始化执行器注册表。
+     * 初始化执行器注册表和 AI 客户端工厂。
+     * 
+     * @param aiClientFactory AI 客户端工厂
      */
-    public AiTaskNodeExecutor() {
+    public AiTaskNodeExecutor(AiClientFactory aiClientFactory) {
         this.executorRegistry = new AiStepExecutorRegistry();
+        this.aiClientFactory = aiClientFactory;
     }
 
     /**
@@ -53,7 +60,7 @@ public class AiTaskNodeExecutor {
             AiTaskState state = initializeState(config, input);
             
             // 执行流程步骤
-            List<StepTrace> steps = executeSteps(config.getFlow(), state);
+            List<StepTrace> steps = executeSteps(config.getFlow(), state, config.getLlmConfig());
             
             // 添加轮次轨迹
             rounds.add(new RoundTrace(1, steps));
@@ -127,13 +134,29 @@ public class AiTaskNodeExecutor {
      * 
      * @param flow 流程步骤配置
      * @param state 任务状态
+     * @param llmConfig LLM 配置
      * @return 步骤执行轨迹
      */
-    private List<StepTrace> executeSteps(List<AiFlowStepConfig> flow, AiTaskState state) {
+    private List<StepTrace> executeSteps(List<AiFlowStepConfig> flow, AiTaskState state, LlmConfig llmConfig) {
         List<StepTrace> steps = new ArrayList<>();
         
+        // 获取 AI 客户端
+        AiClient aiClient = aiClientFactory.getClient(llmConfig.getClientType());
+        
         for (AiFlowStepConfig stepConfig : flow) {
+            // 传递 AI 客户端和 LLM 配置给步骤执行器
             AiStepExecutor executor = executorRegistry.getExecutor(stepConfig.getType());
+            if (executor instanceof GenerateStepExecutor) {
+                ((GenerateStepExecutor) executor).setAiClient(aiClient);
+                ((GenerateStepExecutor) executor).setLlmConfig(llmConfig);
+            } else if (executor instanceof ValidateStepExecutor) {
+                ((ValidateStepExecutor) executor).setAiClient(aiClient);
+                ((ValidateStepExecutor) executor).setLlmConfig(llmConfig);
+            } else if (executor instanceof RepairStepExecutor) {
+                ((RepairStepExecutor) executor).setAiClient(aiClient);
+                ((RepairStepExecutor) executor).setLlmConfig(llmConfig);
+            }
+            
             StepTrace stepTrace = executor.execute(stepConfig, state);
             steps.add(stepTrace);
             
