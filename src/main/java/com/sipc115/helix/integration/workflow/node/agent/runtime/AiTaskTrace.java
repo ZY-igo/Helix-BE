@@ -5,16 +5,18 @@ import java.util.List;
 
 /**
  * AI 任务执行轨迹类
- * <p>
- * 表示 AI 任务的执行轨迹，包括轮次轨迹、最终状态和停止原因。
- * 
- * @author Helix Team
- * @since 2.0.0
  */
 public class AiTaskTrace {
     private List<RoundTrace> rounds;
     private String finalStatus;
     private String stopReason;
+
+    // ⭐ 添加错误信息字段
+    private String errorMessage;
+
+    // 为了方便使用，添加默认构造函数
+    public AiTaskTrace() {
+    }
 
     private AiTaskTrace(Builder builder) {
         this.rounds = builder.rounds;
@@ -22,8 +24,18 @@ public class AiTaskTrace {
         this.stopReason = builder.stopReason;
     }
 
-    // 为了方便使用，添加默认构造函数
-    public AiTaskTrace() {
+    // ... existing code (getters, setters) ...
+
+    public void setRounds(List<RoundTrace> rounds) {
+        this.rounds = rounds;
+    }
+
+    public void setFinalStatus(String finalStatus) {
+        this.finalStatus = finalStatus;
+    }
+
+    public void setStopReason(String stopReason) {
+        this.stopReason = stopReason;
     }
 
     public List<RoundTrace> getRounds() {
@@ -38,23 +50,16 @@ public class AiTaskTrace {
         return stopReason;
     }
 
-    // 添加 setter 方法
-    public void setRounds(List<RoundTrace> rounds) {
-        this.rounds = rounds;
+    public String getErrorMessage() {
+        return errorMessage;
     }
 
-    public void setFinalStatus(String finalStatus) {
-        this.finalStatus = finalStatus;
-    }
-
-    public void setStopReason(String stopReason) {
-        this.stopReason = stopReason;
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 
     /**
      * 轮次轨迹类
-     * <p>
-     * 表示 AI 任务的一个执行轮次。
      */
     public static class RoundTrace {
         private int round;
@@ -76,8 +81,6 @@ public class AiTaskTrace {
 
     /**
      * 步骤轨迹类
-     * <p>
-     * 表示 AI 任务的一个执行步骤。
      */
     public static class StepTrace {
         private String stepId;
@@ -87,13 +90,38 @@ public class AiTaskTrace {
         private Object outputSnapshot;
         private long durationMs;
 
-        public StepTrace(String stepId, String stepType, String status, Object inputSnapshot, Object outputSnapshot, long durationMs) {
+        // ⭐ 添加错误信息字段
+        private String errorMessage;
+
+        public StepTrace(String stepId, String stepType, String status,
+                        Object inputSnapshot, Object outputSnapshot, long durationMs) {
             this.stepId = stepId;
             this.stepType = stepType;
             this.status = status;
             this.inputSnapshot = inputSnapshot;
             this.outputSnapshot = outputSnapshot;
             this.durationMs = durationMs;
+        }
+
+        // ⭐ 添加静态工厂方法
+        public static StepTrace success(String stepId, String stepType,
+                                       Object outputSnapshot, long durationMs) {
+            return new StepTrace(stepId, stepType, "SUCCESS", null, outputSnapshot, durationMs);
+        }
+
+        public static StepTrace failed(String stepId, String stepType,
+                                      String errorMessage, long durationMs) {
+            StepTrace trace = new StepTrace(stepId, stepType, "FAILED", null, null, durationMs);
+            trace.setErrorMessage(errorMessage);
+            return trace;
+        }
+
+        // ⭐ 添加带错误信息的成功/失败方法
+        public static StepTrace create(String stepId, String stepType, String status,
+                                      Object outputSnapshot, long durationMs, String errorMessage) {
+            StepTrace trace = new StepTrace(stepId, stepType, status, null, outputSnapshot, durationMs);
+            trace.setErrorMessage(errorMessage);
+            return trace;
         }
 
         public String getStepId() {
@@ -118,6 +146,14 @@ public class AiTaskTrace {
 
         public long getDurationMs() {
             return durationMs;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public void setErrorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
         }
     }
 

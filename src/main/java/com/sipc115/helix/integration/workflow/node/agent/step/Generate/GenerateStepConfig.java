@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.node.agent.config;
+package com.sipc115.helix.integration.workflow.node.agent.step.Generate;
 
+import com.sipc115.helix.integration.workflow.node.agent.step.task.AiFlowStepConfig;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 

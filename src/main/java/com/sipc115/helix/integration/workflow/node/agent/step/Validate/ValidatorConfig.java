@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.node.agent.config;
+package com.sipc115.helix.integration.workflow.node.agent.step.Validate;
 
 import lombok.Data;
 import java.util.List;

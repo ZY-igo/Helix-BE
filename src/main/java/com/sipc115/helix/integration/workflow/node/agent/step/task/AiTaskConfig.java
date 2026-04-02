@@ -1,6 +1,8 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.node.agent.config;
+package com.sipc115.helix.integration.workflow.node.agent.step.task;
 
+import com.sipc115.helix.integration.workflow.node.agent.step.LlmConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.RuntimePolicyConfig;
 import lombok.Data;
 import java.util.List;
 import java.util.Map;

@@ -1,7 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent;
 
-import com.sipc115.helix.integration.workflow.node.agent.config.AiTaskConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.task.AiTaskConfig;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.integration.workflow.compiler.NodeDefinition;
 import org.springframework.stereotype.Component;

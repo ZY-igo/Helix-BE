@@ -1,171 +1,102 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent.executor;
 
-import com.sipc115.helix.integration.llm.AiClient;
-import com.sipc115.helix.integration.llm.AiClientFactory;
-import com.sipc115.helix.integration.workflow.node.agent.config.AiFlowStepConfig;
-import com.sipc115.helix.integration.workflow.node.agent.config.AiTaskConfig;
-import com.sipc115.helix.integration.workflow.node.agent.config.LlmConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.task.AiTaskConfig;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskState;
-import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace;
-import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace.RoundTrace;
-import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace.StepTrace;
+import com.sipc115.helix.integration.workflow.node.agent.workflow.AiTaskWorkflow;
+import com.sipc115.helix.domain.workflow.CompiledNode;
+import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
+import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
+import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
+import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
+import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowOptions;
+import io.temporal.serviceclient.WorkflowServiceStubs;
+import io.temporal.serviceclient.WorkflowServiceStubsOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * AI 任务节点执行器类
+ * AI 任务节点执行器
  * <p>
- * 执行完整的 AI 任务流程，整合所有步骤执行器。
- * 
+ * 使用 Temporal Workflow 执行 AI 子流程
+ *
  * @author Helix Team
  * @since 2.0.0
  */
-public class AiTaskNodeExecutor {
-    private final AiStepExecutorRegistry executorRegistry;
-    private final AiClientFactory aiClientFactory;
+@Component
+public class AiTaskNodeExecutor implements WorkflowNodeExecutor {
 
-    /**
-     * 构造函数
-     * <p>
-     * 初始化执行器注册表和 AI 客户端工厂。
-     * 
-     * @param aiClientFactory AI 客户端工厂
-     */
-    public AiTaskNodeExecutor(AiClientFactory aiClientFactory) {
-        this.executorRegistry = new AiStepExecutorRegistry();
-        this.aiClientFactory = aiClientFactory;
-    }
+    private static final Logger log = LoggerFactory.getLogger(AiTaskNodeExecutor.class);
 
-    /**
-     * 执行 AI 任务
-     * <p>
-     * 执行完整的 AI 任务流程，返回执行轨迹。
-     * 
-     * @param config AI 任务配置
-     * @param input 输入参数
-     * @return 执行轨迹
-     */
-    public AiTaskTrace execute(AiTaskConfig config, Map<String, Object> input) {
-        long startTime = System.currentTimeMillis();
-        String finalStatus = "SUCCESS";
-        String stopReason = "任务完成";
-        List<RoundTrace> rounds = new ArrayList<>();
-        
-        try {
-            // 初始化任务状态
-            AiTaskState state = initializeState(config, input);
-            
-            // 执行流程步骤
-            List<StepTrace> steps = executeSteps(config.getFlow(), state, config.getLlmConfig());
-            
-            // 添加轮次轨迹
-            rounds.add(new RoundTrace(1, steps));
-        } catch (Exception e) {
-            finalStatus = "FAILED";
-            stopReason = "执行异常: " + e.getMessage();
-            // TODO: 处理异常
-        }
-        
-        // 创建并返回执行轨迹
-        AiTaskTrace trace = new AiTaskTrace();
-        trace.setRounds(rounds);
-        trace.setFinalStatus(finalStatus);
-        trace.setStopReason(stopReason);
-        return trace;
-    }
+    private final WorkflowServiceStubs serviceStubs;
+    private final WorkflowClient workflowClient;
 
-    /**
-     * 初始化任务状态
-     * <p>
-     * 根据配置初始化任务状态。
-     * 
-     * @param config AI 任务配置
-     * @param input 输入参数
-     * @return 初始化后的任务状态
-     */
-    private AiTaskState initializeState(AiTaskConfig config, Map<String, Object> input) {
-        // 解析输入
-        Map<String, Object> resolvedInput = resolveInputs(config.getInputs(), input);
-        
-        // 初始化变量
-        Map<String, Object> vars = new HashMap<>(config.getVars());
-        
-        // 初始化元数据
-        Map<String, Object> meta = new HashMap<>();
-        meta.put("currentRound", 1);
-        meta.put("modelCalls", 0);
-        
-        // 由于 AiTaskState 使用了 Builder 模式，直接使用它
-        return new AiTaskState.Builder()
-                .input(resolvedInput)
-                .vars(vars)
-                .meta(meta)
+    public AiTaskNodeExecutor() {
+        // 初始化 Temporal 客户端
+        WorkflowServiceStubsOptions options = WorkflowServiceStubsOptions.newBuilder()
+                .setTarget("localhost:7233") // 默认 Temporal 服务器地址
                 .build();
+        this.serviceStubs = WorkflowServiceStubs.newServiceStubs(options);
+        this.workflowClient = WorkflowClient.newInstance(serviceStubs);
     }
 
-    /**
-     * 解析输入
-     * <p>
-     * 解析输入表达式，替换变量。
-     * 
-     * @param inputConfigs 输入配置
-     * @param workflowInput 工作流输入
-     * @return 解析后的输入
-     */
-    private Map<String, Object> resolveInputs(Map<String, String> inputConfigs, Map<String, Object> workflowInput) {
-        Map<String, Object> resolvedInput = new HashMap<>();
-        
-        // TODO: 实现输入解析逻辑
-        // 1. 解析表达式
-        // 2. 替换变量
-        // 3. 返回解析后的输入
-        
-        return resolvedInput;
+    @Override
+    public boolean supports(String type) {
+        return "AI_TASK".equals(type);
     }
 
-    /**
-     * 执行流程步骤
-     * <p>
-     * 执行流程中的所有步骤。
-     * 
-     * @param flow 流程步骤配置
-     * @param state 任务状态
-     * @param llmConfig LLM 配置
-     * @return 步骤执行轨迹
-     */
-    private List<StepTrace> executeSteps(List<AiFlowStepConfig> flow, AiTaskState state, LlmConfig llmConfig) {
-        List<StepTrace> steps = new ArrayList<>();
-        
-        // 获取 AI 客户端
-        AiClient aiClient = aiClientFactory.getClient(llmConfig.getClientType());
-        
-        for (AiFlowStepConfig stepConfig : flow) {
-            // 传递 AI 客户端和 LLM 配置给步骤执行器
-            AiStepExecutor executor = executorRegistry.getExecutor(stepConfig.getType());
-            if (executor instanceof GenerateStepExecutor) {
-                ((GenerateStepExecutor) executor).setAiClient(aiClient);
-                ((GenerateStepExecutor) executor).setLlmConfig(llmConfig);
-            } else if (executor instanceof ValidateStepExecutor) {
-                ((ValidateStepExecutor) executor).setAiClient(aiClient);
-                ((ValidateStepExecutor) executor).setLlmConfig(llmConfig);
-            } else if (executor instanceof RepairStepExecutor) {
-                ((RepairStepExecutor) executor).setAiClient(aiClient);
-                ((RepairStepExecutor) executor).setLlmConfig(llmConfig);
+    @Override
+    public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
+        log.info("Executing AI task node: {}", node.getId());
+
+        try {
+            // 1. 从配置中获取 AI 任务配置
+            AiTaskConfig aiTaskConfig = (AiTaskConfig) node.getConfig().get("aiTaskConfig");
+            if (aiTaskConfig == null) {
+                throw new IllegalArgumentException("AI task config not found");
             }
-            
-            StepTrace stepTrace = executor.execute(stepConfig, state);
-            steps.add(stepTrace);
-            
-            // 检查是否为返回步骤
-            if (stepConfig.getType().equals(AiFlowStepConfig.StepType.RETURN.name())) {
-                break;
+
+            // 2. 构建初始状态
+            AiTaskState initialState = AiTaskState.builder()
+                    .input(context.getVariables())
+                    .vars(new HashMap<>(aiTaskConfig.getVars()))
+                    .llmConfig(aiTaskConfig.getLlmConfig())
+                    .build();
+
+            // 3. 启动 Temporal Workflow
+            WorkflowOptions workflowOptions = WorkflowOptions.newBuilder()
+                    .setTaskQueue("ai-task-queue")
+                    .setWorkflowId("ai-task-" + node.getId() + "-" + System.currentTimeMillis())
+                    .build();
+
+            AiTaskWorkflow workflow = workflowClient.newWorkflowStub(AiTaskWorkflow.class, workflowOptions);
+            AiTaskState finalState = workflow.execute(aiTaskConfig, initialState);
+
+            // 4. 处理执行结果
+            Map<String, Object> output = finalState.getOutput();
+            if (output != null) {
+                context.getVariables().putAll(output);
+                log.info("AI task node completed with output: {}", output);
+            } else {
+                log.info("AI task node completed without output");
             }
+
+            return NodeExecutionResult.completed();
+
+        } catch (Exception e) {
+            log.error("Failed to execute AI task node: {}", node.getId(), e);
+            NodeExecutionResult result = NodeExecutionResult.completed();
+            result.setStatus(com.sipc115.helix.domain.workflow.ExecutionStatus.FAILED);
+            return result;
+        } finally {
+            // 关闭 Temporal 客户端（可选，在实际应用中可能会保持长连接）
+            // serviceStubs.shutdown();
         }
-        
-        return steps;
     }
 }

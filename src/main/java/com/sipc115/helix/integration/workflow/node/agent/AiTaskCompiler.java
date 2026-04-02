@@ -2,12 +2,16 @@
 package com.sipc115.helix.integration.workflow.node.agent;
 
 import com.sipc115.helix.expression.ExpressionEngine;
-import com.sipc115.helix.integration.workflow.node.agent.config.*;
+import com.sipc115.helix.integration.workflow.node.agent.spi.StepDefinition;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.integration.workflow.compiler.CompileContext;
 import com.sipc115.helix.integration.workflow.compiler.NodeCompiler;
+import com.sipc115.helix.integration.workflow.node.agent.step.task.AiFlowStepConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.task.AiTaskConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.LlmConfig;
+import com.sipc115.helix.integration.workflow.node.agent.step.RuntimePolicyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +26,7 @@ import java.util.Map;
  * AI 任务编译器类
  * <p>
  * 负责将 AI 任务的 DSL 配置编译为可执行的 AiTaskConfig，并进行验证和优化。
+ * 使用 StepDefinition 模式自动发现和处理不同类型的步骤。
  * 
  * @author Helix Team
  * @since 2.0.0
@@ -33,6 +38,24 @@ public class AiTaskCompiler implements NodeCompiler {
 
     @Autowired
     private ExpressionEngine expressionEngine;
+
+    private final Map<String, StepDefinition<? extends AiFlowStepConfig>> stepDefinitions = new HashMap<>();
+
+    /**
+     * 构造函数
+     * <p>
+     * 自动注入所有 StepDefinition 实现，并构建类型到定义的映射。
+     *
+     * @param stepDefinitions 步骤定义列表
+     */
+    @Autowired
+    public AiTaskCompiler(List<StepDefinition<? extends AiFlowStepConfig>> stepDefinitions) {
+        for (StepDefinition<? extends AiFlowStepConfig> definition : stepDefinitions) {
+            String type = definition.supportedType();
+            this.stepDefinitions.put(type, definition);
+            logger.info("Registered StepDefinition for type: {}", type);
+        }
+    }
 
     @Override
     public DslNodeType supportType() {
@@ -149,148 +172,23 @@ public class AiTaskCompiler implements NodeCompiler {
             throw new IllegalArgumentException("Step " + stepIndex + " must have a type: " + nodeId);
         }
         
-        String id = (String) stepMap.get("id");
-        if (id == null || id.isEmpty()) {
-            throw new IllegalArgumentException("Step " + stepIndex + " must have an id: " + nodeId);
+        // 获取对应的 StepDefinition
+        StepDefinition<? extends AiFlowStepConfig> definition = stepDefinitions.get(type);
+        if (definition == null) {
+            throw new IllegalArgumentException("Unsupported step type: " + type + " at step " + stepIndex + " in " + nodeId);
         }
         
-        // 根据步骤类型进行特定验证
-        switch (type) {
-            case "GENERATE":
-                validateGenerateStep(stepMap, stepIndex, nodeId);
-                break;
-            case "VALIDATE":
-                validateValidateStep(stepMap, stepIndex, nodeId);
-                break;
-            case "REPAIR":
-                validateRepairStep(stepMap, stepIndex, nodeId);
-                break;
-            case "IF":
-                validateIfStep(stepMap, stepIndex, nodeId);
-                break;
-            case "LOOP_WHILE":
-                validateLoopWhileStep(stepMap, stepIndex, nodeId);
-                break;
-            case "RETURN":
-                validateReturnStep(stepMap, stepIndex, nodeId);
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported step type: " + type + " at step " + stepIndex + " in " + nodeId);
-        }
-    }
-
-    /**
-     * 验证生成步骤
-     */
-    private void validateGenerateStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        Map<?, ?> promptConfig = (Map<?, ?>) stepMap.get("prompt");
-        if (promptConfig == null) {
-            throw new IllegalArgumentException("Generate step " + stepIndex + " must have prompt configuration: " + nodeId);
-        }
-        
-        String template = (String) promptConfig.get("template");
-        if (template == null || template.isEmpty()) {
-            throw new IllegalArgumentException("Generate step " + stepIndex + " must have prompt template: " + nodeId);
-        }
-        
-        Map<?, ?> outputConfig = (Map<?, ?>) stepMap.get("output");
-        if (outputConfig != null) {
-            String var = (String) outputConfig.get("var");
-            if (var == null || var.isEmpty()) {
-                throw new IllegalArgumentException("Generate step " + stepIndex + " output must have var: " + nodeId);
+        // 转换为 Map<String, Object>
+        @SuppressWarnings("unchecked")
+        Map<String, Object> stepConfig = new HashMap<>();
+        for (Map.Entry<?, ?> entry : stepMap.entrySet()) {
+            if (entry.getKey() instanceof String) {
+                stepConfig.put((String) entry.getKey(), entry.getValue());
             }
         }
-    }
-
-    /**
-     * 验证验证步骤
-     */
-    private void validateValidateStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        String input = (String) stepMap.get("input");
-        if (input == null || input.isEmpty()) {
-            throw new IllegalArgumentException("Validate step " + stepIndex + " must have input: " + nodeId);
-        }
         
-        List<?> validators = (List<?>) stepMap.get("validators");
-        if (validators == null || validators.isEmpty()) {
-            throw new IllegalArgumentException("Validate step " + stepIndex + " must have at least one validator: " + nodeId);
-        }
-        
-        for (int i = 0; i < validators.size(); i++) {
-            Object validatorObj = validators.get(i);
-            if (!(validatorObj instanceof Map)) {
-                throw new IllegalArgumentException("Validator " + i + " in step " + stepIndex + " must be a map: " + nodeId);
-            }
-            
-            Map<?, ?> validatorMap = (Map<?, ?>) validatorObj;
-            String kind = (String) validatorMap.get("kind");
-            if (kind == null || kind.isEmpty()) {
-                throw new IllegalArgumentException("Validator " + i + " in step " + stepIndex + " must have kind: " + nodeId);
-            }
-        }
-    }
-
-    /**
-     * 验证修复步骤
-     */
-    private void validateRepairStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        String input = (String) stepMap.get("input");
-        if (input == null || input.isEmpty()) {
-            throw new IllegalArgumentException("Repair step " + stepIndex + " must have input: " + nodeId);
-        }
-        
-        String feedback = (String) stepMap.get("feedback");
-        if (feedback == null || feedback.isEmpty()) {
-            throw new IllegalArgumentException("Repair step " + stepIndex + " must have feedback: " + nodeId);
-        }
-        
-        Map<?, ?> promptConfig = (Map<?, ?>) stepMap.get("prompt");
-        if (promptConfig != null) {
-            String template = (String) promptConfig.get("template");
-            if (template == null || template.isEmpty()) {
-                throw new IllegalArgumentException("Repair step " + stepIndex + " prompt must have template: " + nodeId);
-            }
-        }
-    }
-
-    /**
-     * 验证条件步骤
-     */
-    private void validateIfStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        String condition = (String) stepMap.get("condition");
-        if (condition == null || condition.isEmpty()) {
-            throw new IllegalArgumentException("If step " + stepIndex + " must have condition: " + nodeId);
-        }
-        
-        List<?> thenSteps = (List<?>) stepMap.get("then");
-        if (thenSteps == null || thenSteps.isEmpty()) {
-            throw new IllegalArgumentException("If step " + stepIndex + " must have then branch: " + nodeId);
-        }
-    }
-
-    /**
-     * 验证循环步骤
-     */
-    private void validateLoopWhileStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        String condition = (String) stepMap.get("condition");
-        if (condition == null || condition.isEmpty()) {
-            throw new IllegalArgumentException("LoopWhile step " + stepIndex + " must have condition: " + nodeId);
-        }
-        
-        List<?> bodySteps = (List<?>) stepMap.get("body");
-        if (bodySteps == null || bodySteps.isEmpty()) {
-            throw new IllegalArgumentException("LoopWhile step " + stepIndex + " must have body: " + nodeId);
-        }
-    }
-
-    /**
-     * 验证返回步骤
-     */
-    private void validateReturnStep(Map<?, ?> stepMap, int stepIndex, String nodeId) {
-        Object result = stepMap.get("result");
-        if (result != null && !(result instanceof Map)) {
-            throw new IllegalArgumentException("Return step " + stepIndex + " result must be a map: " + nodeId);
-        }
+        // 使用 StepDefinition 进行验证
+        definition.validate(stepConfig, stepIndex, nodeId);
     }
 
     /**
@@ -393,28 +291,15 @@ public class AiTaskCompiler implements NodeCompiler {
     private void validateStepExpressions(Map<?, ?> stepMap, int stepIndex, String nodeId) {
         String type = (String) stepMap.get("type");
         
-        switch (type) {
-            case "IF":
-                String condition = (String) stepMap.get("condition");
-                if (condition != null) {
-                    try {
-                        expressionEngine.compile(condition);
-                    } catch (Exception e) {
-                        throw new IllegalArgumentException("Invalid condition expression in step " + stepIndex + ": " + condition + " in " + nodeId, e);
-                    }
+        if ("IF".equals(type) || "LOOP_WHILE".equals(type)) {
+            String condition = (String) stepMap.get("condition");
+            if (condition != null) {
+                try {
+                    expressionEngine.compile(condition);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Invalid condition expression in step " + stepIndex + ": " + condition + " in " + nodeId, e);
                 }
-                break;
-                
-            case "LOOP_WHILE":
-                String loopCondition = (String) stepMap.get("condition");
-                if (loopCondition != null) {
-                    try {
-                        expressionEngine.compile(loopCondition);
-                    } catch (Exception e) {
-                        throw new IllegalArgumentException("Invalid loop condition expression in step " + stepIndex + ": " + loopCondition + " in " + nodeId, e);
-                    }
-                }
-                break;
+            }
         }
     }
 
@@ -458,7 +343,7 @@ public class AiTaskCompiler implements NodeCompiler {
     private List<AiFlowStepConfig> parseFlow(Map<String, Object> dslConfig) {
         List<AiFlowStepConfig> flow = new ArrayList<>();
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> steps = (List<Map<String, Object>>)
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) 
             dslConfig.getOrDefault("flow", new ArrayList<>());
 
         for (Map<String, Object> stepConfig : steps) {
@@ -473,201 +358,15 @@ public class AiTaskCompiler implements NodeCompiler {
      */
     private AiFlowStepConfig parseStep(Map<String, Object> stepConfig) {
         String type = (String) stepConfig.get("type");
-        return switch (type) {
-            case "GENERATE" -> parseGenerateStep(stepConfig);
-            case "VALIDATE" -> parseValidateStep(stepConfig);
-            case "REPAIR" -> parseRepairStep(stepConfig);
-            case "IF" -> parseIfStep(stepConfig);
-            case "LOOP_WHILE" -> parseLoopWhileStep(stepConfig);
-            case "RETURN" -> parseReturnStep(stepConfig);
-            default -> throw new IllegalArgumentException("Unsupported step type: " + type);
-        };
-    }
-
-    /**
-     * 解析生成步骤
-     */
-    private GenerateStepConfig parseGenerateStep(Map<String, Object> stepConfig) {
-        GenerateStepConfig config = new GenerateStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("GENERATE");
-
-        // 解析提示词配置
-        @SuppressWarnings("unchecked")
-        Map<String, Object> promptConfig = (Map<String, Object>) stepConfig.get("prompt");
-        if (promptConfig != null) {
-            config.setPromptTemplate((String) promptConfig.get("template"));
-            // 提示词变量暂不支持，因为 GenerateStepConfig 中没有对应的字段
+        
+        // 获取对应的 StepDefinition
+        StepDefinition<? extends AiFlowStepConfig> definition = stepDefinitions.get(type);
+        if (definition == null) {
+            throw new IllegalArgumentException("Unsupported step type: " + type);
         }
-
-        config.setModel((String) stepConfig.getOrDefault("model", "glm-4"));
-        config.setTemperature(getDoubleValue(stepConfig, "temperature", 0.7));
-
-        // 解析输出变量
-        @SuppressWarnings("unchecked")
-        Map<String, Object> outputConfig = (Map<String, Object>) stepConfig.get("output");
-        if (outputConfig != null) {
-            config.setOutputVar((String) outputConfig.get("var"));
-        }
-
-        return config;
-    }
-
-    /**
-     * 解析验证步骤
-     */
-    private ValidateStepConfig parseValidateStep(Map<String, Object> stepConfig) {
-        ValidateStepConfig config = new ValidateStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("VALIDATE");
-        config.setInput((String) stepConfig.get("input"));
-
-        // 解析验证器列表
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> validatorConfigs =
-            (List<Map<String, Object>>) stepConfig.getOrDefault("validators", new ArrayList<>());
-        List<ValidatorConfig> validators = new ArrayList<>();
-
-        for (Map<String, Object> validatorConfig : validatorConfigs) {
-            ValidatorConfig validator = new ValidatorConfig();
-            validator.setKind((String) validatorConfig.get("kind"));
-            validator.setPrompt((String) validatorConfig.get("prompt"));
-            validator.setSchemaRef((String) validatorConfig.get("schema"));
-
-            // 解析字段列表
-            Object fieldsObj = validatorConfig.get("fields");
-            if (fieldsObj instanceof List) {
-                List<String> fields = new ArrayList<>();
-                ((List<?>) fieldsObj).forEach(f -> fields.add(String.valueOf(f)));
-                validator.setFields(fields);
-            }
-
-            validators.add(validator);
-        }
-
-        config.setValidators(validators);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> outputConfig = (Map<String, Object>) stepConfig.get("output");
-        if (outputConfig != null) {
-            config.setOutputVar((String) outputConfig.get("var"));
-        }
-
-        return config;
-    }
-
-    /**
-     * 解析修复步骤
-     */
-    private RepairStepConfig parseRepairStep(Map<String, Object> stepConfig) {
-        RepairStepConfig config = new RepairStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("REPAIR");
-        config.setInput((String) stepConfig.get("input"));
-        config.setFeedback((String) stepConfig.get("feedback"));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> promptConfig = (Map<String, Object>) stepConfig.get("prompt");
-        if (promptConfig != null) {
-            config.setPromptTemplate((String) promptConfig.get("template"));
-        }
-
-        config.setModel((String) stepConfig.getOrDefault("model", "glm-4"));
-        config.setTemperature(getDoubleValue(stepConfig, "temperature", 0.7));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> outputConfig = (Map<String, Object>) stepConfig.get("output");
-        if (outputConfig != null) {
-            config.setOutputVar((String) outputConfig.get("var"));
-        }
-
-        return config;
-    }
-
-    /**
-     * 解析条件步骤
-     */
-    private IfStepConfig parseIfStep(Map<String, Object> stepConfig) {
-        IfStepConfig config = new IfStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("IF");
-        config.setCondition((String) stepConfig.get("condition"));
-
-        // 解析 then 分支
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> thenSteps =
-            (List<Map<String, Object>>) stepConfig.getOrDefault("then", new ArrayList<>());
-        List<AiFlowStepConfig> thenFlow = new ArrayList<>();
-        for (Map<String, Object> thenStep : thenSteps) {
-            thenFlow.add(parseStep(thenStep));
-        }
-        config.setThenSteps(thenFlow);
-
-        // 解析 else 分支
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> elseSteps =
-            (List<Map<String, Object>>) stepConfig.getOrDefault("else", new ArrayList<>());
-        List<AiFlowStepConfig> elseFlow = new ArrayList<>();
-        for (Map<String, Object> elseStep : elseSteps) {
-            elseFlow.add(parseStep(elseStep));
-        }
-        config.setElseSteps(elseFlow);
-
-        return config;
-    }
-
-    /**
-     * 解析循环步骤
-     */
-    private LoopWhileStepConfig parseLoopWhileStep(Map<String, Object> stepConfig) {
-        LoopWhileStepConfig config = new LoopWhileStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("LOOP_WHILE");
-        config.setCondition((String) stepConfig.get("condition"));
-        config.setMaxRounds(getIntValue(stepConfig, "maxRounds", 3));
-
-        // 解析循环体
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> bodySteps =
-            (List<Map<String, Object>>) stepConfig.getOrDefault("body", new ArrayList<>());
-        List<AiFlowStepConfig> bodyFlow = new ArrayList<>();
-        for (Map<String, Object> bodyStep : bodySteps) {
-            bodyFlow.add(parseStep(bodyStep));
-        }
-        config.setBody(bodyFlow);
-
-        return config;
-    }
-
-    /**
-     * 解析返回步骤
-     */
-    private ReturnStepConfig parseReturnStep(Map<String, Object> stepConfig) {
-        ReturnStepConfig config = new ReturnStepConfig();
-        config.setId((String) stepConfig.get("id"));
-        config.setType("RETURN");
-
-        Object resultObj = stepConfig.get("result");
-        if (resultObj instanceof Map) {
-            Map<String, Object> result = new HashMap<>();
-            ((Map<?, ?>) resultObj).forEach((key, value) -> result.put(key.toString(), value));
-            config.setResult(result);
-        } else {
-            config.setResult(new HashMap<>());
-        }
-
-        return config;
-    }
-
-    /**
-     * 解析子流程
-     */
-    private List<AiFlowStepConfig> parseSubFlow(List<Map<String, Object>> steps) {
-        List<AiFlowStepConfig> subFlow = new ArrayList<>();
-        for (Map<String, Object> stepConfig : steps) {
-            subFlow.add(parseStep(stepConfig));
-        }
-        return subFlow;
+        
+        // 使用 StepDefinition 进行解析
+        return definition.parseConfig(stepConfig);
     }
 
     /**
@@ -676,7 +375,7 @@ public class AiTaskCompiler implements NodeCompiler {
     private RuntimePolicyConfig parseRuntimePolicy(Map<String, Object> dslConfig) {
         RuntimePolicyConfig config = new RuntimePolicyConfig();
         @SuppressWarnings("unchecked")
-        Map<String, Object> policyConfig =
+        Map<String, Object> policyConfig = 
             (Map<String, Object>) dslConfig.getOrDefault("runtimePolicy", Map.of());
 
         config.setMaxTotalRounds(getIntValue(policyConfig, "maxRounds", 3));
@@ -693,7 +392,7 @@ public class AiTaskCompiler implements NodeCompiler {
     private LlmConfig parseLlmConfig(Map<String, Object> dslConfig) {
         LlmConfig config = new LlmConfig();
         @SuppressWarnings("unchecked")
-        Map<String, Object> llmConfigObj =
+        Map<String, Object> llmConfigObj = 
             (Map<String, Object>) dslConfig.getOrDefault("llmConfig", Map.of());
 
         config.setClientType((String) llmConfigObj.getOrDefault("clientType", "zhipu"));

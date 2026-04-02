@@ -1,15 +1,13 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.node.agent.executor;
+package com.sipc115.helix.integration.workflow.node.agent.step.Generate;
 
 import com.sipc115.helix.integration.llm.AiClient;
+import com.sipc115.helix.integration.workflow.node.agent.activity.AiStepActivity;
 import com.sipc115.helix.integration.workflow.node.agent.step.task.AiFlowStepConfig;
-import com.sipc115.helix.integration.workflow.node.agent.step.Generate.GenerateStepConfig;
-import com.sipc115.helix.integration.workflow.node.agent.step.LlmConfig;
-import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskExecutionException;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskState;
 import com.sipc115.helix.integration.workflow.node.agent.runtime.AiTaskTrace.StepTrace;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.temporal.activity.ActivityInterface;
+import io.temporal.activity.ActivityMethod;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -18,28 +16,28 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 生成步骤执行器
+ * 生成步骤 Activity
+ * <p>
+ * 执行 AI 生成步骤，调用 AI 模型生成内容
+ *
+ * @author Helix Team
+ * @since 2.0.0
  */
+@ActivityInterface
 @Component
-public class GenerateStepExecutor implements AiStepExecutor {
-
-    private static final Logger log = LoggerFactory.getLogger(GenerateStepExecutor.class);
+public class GenerateStepActivity implements AiStepActivity {
 
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{\\{(\\w+)\\}\\}");
 
     private final AiClient aiClient;
 
-    /**
-     * 构造函数
-     *
-     * @param aiClient AI 客户端
-     */
     @Autowired
-    public GenerateStepExecutor(AiClient aiClient) {
+    public GenerateStepActivity(AiClient aiClient) {
         this.aiClient = aiClient;
     }
 
     @Override
+    @ActivityMethod
     public StepTrace execute(AiFlowStepConfig stepConfig, AiTaskState state) {
         long startTime = System.currentTimeMillis();
         String status = "SUCCESS";
@@ -47,71 +45,57 @@ public class GenerateStepExecutor implements AiStepExecutor {
         String errorMessage = null;
 
         try {
-            GenerateStepConfig config = (GenerateStepConfig) stepConfig;
-            LlmConfig llmConfig = state.getLlmConfig();
-
-            // ⭐ 1. 渲染提示词模板
-            String renderedPrompt = renderTemplate(config.getPromptTemplate(), state.getVars());
-
-            if (renderedPrompt.isEmpty()) {
-                throw AiTaskExecutionException.validationFailed(
-                    stepConfig.getId(),
-                    "提示词模板不能为空"
+            // ⭐ 类型转换：基类 → 子类（向下转型）
+            if (!(stepConfig instanceof GenerateStepConfig)) {
+                throw new IllegalArgumentException(
+                    "Expected GenerateStepConfig but got: " + stepConfig.getClass().getName()
                 );
             }
 
-            // ⭐ 2. 调用 AI 模型
-            String systemPrompt = llmConfig != null ? llmConfig.getSystemPrompt() : null;
+            GenerateStepConfig config = (GenerateStepConfig) stepConfig;
+
+            // 1. 渲染提示词模板
+            String renderedPrompt = renderTemplate(config.getPromptTemplate(), state.getVars());
+
+            if (renderedPrompt == null || renderedPrompt.isEmpty()) {
+                throw new IllegalArgumentException("提示词模板不能为空");
+            }
+
+            // 2. 调用 AI 模型
+            String systemPrompt = state.getLlmConfig() != null ? state.getLlmConfig().getSystemPrompt() : null;
             String generatedContent = aiClient.chat("GENERATE", systemPrompt, renderedPrompt);
 
             if (generatedContent == null || generatedContent.isEmpty()) {
-                throw AiTaskExecutionException.modelError(
-                    stepConfig.getId(),
-                    new IllegalStateException("AI 模型返回空内容")
-                );
+                throw new IllegalStateException("AI 模型返回空内容");
             }
 
-            // ⭐ 3. 保存生成结果
+            // 3. 保存生成结果
             String varName = config.getOutputVar();
             if (varName != null) {
                 state.getVars().put(varName, generatedContent);
                 outputSnapshot = generatedContent;
-
-                log.info("Generated content saved to variable '{}': {} chars",
-                    varName, generatedContent.length());
             }
 
-        } catch (AiTaskExecutionException e) {
-            log.error("AI task execution failed at step: {}", stepConfig.getId(), e);
-            status = "FAILED";
-            errorMessage = e.getOriginalMessage();
-
         } catch (Exception e) {
-            log.error("Unexpected error in generate step: {}", stepConfig.getId(), e);
             status = "FAILED";
-            errorMessage = "系统异常：" + e.getMessage();
+            errorMessage = e.getMessage();
         }
 
         long durationMs = System.currentTimeMillis() - startTime;
-
-        // ⭐ 使用构造函数创建 StepTrace
         StepTrace trace = new StepTrace(
-            stepConfig.getId(),
-            stepConfig.getType(),
-            status,
-            null,
-            outputSnapshot,
-            durationMs
+                stepConfig.getId(),
+                stepConfig.getType(),
+                status,
+                null,
+                outputSnapshot,
+                durationMs
         );
-
-        // ⭐ 设置错误信息
         trace.setErrorMessage(errorMessage);
-
         return trace;
     }
 
     /**
-     * ⭐ 渲染模板中的 {{variable}} 占位符
+     * 渲染模板中的 {{variable}} 占位符
      */
     private String renderTemplate(String template, Map<String, Object> vars) {
         if (template == null) {
@@ -130,10 +114,5 @@ public class GenerateStepExecutor implements AiStepExecutor {
         matcher.appendTail(result);
 
         return result.toString();
-    }
-
-    @Override
-    public String getSupportedType() {
-        return AiFlowStepConfig.StepType.GENERATE.name();
     }
 }
