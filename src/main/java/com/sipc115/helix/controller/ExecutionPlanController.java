@@ -5,15 +5,14 @@ import com.sipc115.helix.domain.entity.ExecutionPlanEntity;
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
 import com.sipc115.helix.service.ExecutionPlanService;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -220,6 +219,7 @@ public class ExecutionPlanController {
      * 封装编译执行计划所需的参数。
      * </p>
      */
+    @Data
     public static class CompileRequest {
         /**
          * 工作流 DSL 对象
@@ -230,21 +230,5 @@ public class ExecutionPlanController {
          * 编译人
          */
         private String compiledBy;
-
-        public WorkflowDsl getWorkflowDsl() {
-            return workflowDsl;
-        }
-
-        public void setWorkflowDsl(WorkflowDsl workflowDsl) {
-            this.workflowDsl = workflowDsl;
-        }
-
-        public String getCompiledBy() {
-            return compiledBy;
-        }
-
-        public void setCompiledBy(String compiledBy) {
-            this.compiledBy = compiledBy;
-        }
     }
 }

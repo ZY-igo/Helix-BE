@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.domain.workflow.AiStepExecutionEntity;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionEntity;
+import com.sipc115.helix.domain.workflow.WorkflowTraceEvent;
+import com.sipc115.helix.integration.mq.WorkflowTraceMQService;
 import com.sipc115.helix.repository.jpa.AiStepExecutionRepository;
 import com.sipc115.helix.repository.jpa.NodeExecutionTraceRepository;
 import com.sipc115.helix.repository.jpa.WorkflowExecutionRepository;
@@ -17,11 +19,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 工作流追踪服务
- * <p>
- * 负责记录和查询工作流的执行轨迹
- */
 @Service
 public class WorkflowTraceService {
 
@@ -30,26 +27,24 @@ public class WorkflowTraceService {
     private final WorkflowExecutionRepository executionRepo;
     private final NodeExecutionTraceRepository nodeTraceRepo;
     private final AiStepExecutionRepository aiStepRepo;
+    private final WorkflowTraceMQService mqService;
     private final ObjectMapper objectMapper;
 
     public WorkflowTraceService(
             WorkflowExecutionRepository executionRepo,
             NodeExecutionTraceRepository nodeTraceRepo,
             AiStepExecutionRepository aiStepRepo,
+            WorkflowTraceMQService mqService,
             ObjectMapper objectMapper) {
         this.executionRepo = executionRepo;
         this.nodeTraceRepo = nodeTraceRepo;
         this.aiStepRepo = aiStepRepo;
+        this.mqService = mqService;
         this.objectMapper = objectMapper;
     }
 
-    // ==================== 工作流执行追踪 ====================
-
-    /**
-     * 创建工作流执行记录
-     */
     @Transactional
-    public WorkflowExecutionEntity startExecution(String workflowId, Integer version,
+    public WorkflowExecutionEntity startExecution(String workflowId, String version,
                                                    Map<String, Object> input, String triggeredBy) {
         WorkflowExecutionEntity entity = new WorkflowExecutionEntity();
         entity.setWorkflowId(workflowId);
@@ -63,12 +58,18 @@ public class WorkflowTraceService {
         log.info("Workflow execution started: executionId={}, workflowId={}",
             saved.getId(), workflowId);
 
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_WORKFLOW_START)
+            .executionId(saved.getId())
+            .status("RUNNING")
+            .inputData(input)
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendWorkflowEvent(event);
+
         return saved;
     }
 
-    /**
-     * 标记工作流执行成功
-     */
     @Transactional
     public void markExecutionSuccess(Long executionId, Map<String, Object> output) {
         WorkflowExecutionEntity entity = executionRepo.findById(executionId)
@@ -81,11 +82,17 @@ public class WorkflowTraceService {
 
         executionRepo.save(entity);
         log.info("Workflow execution completed successfully: executionId={}", executionId);
+
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_WORKFLOW_COMPLETE)
+            .executionId(executionId)
+            .status("SUCCESS")
+            .outputData(output)
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendWorkflowEvent(event);
     }
 
-    /**
-     * 标记工作流执行失败
-     */
     @Transactional
     public void markExecutionFailed(Long executionId, String errorMessage) {
         WorkflowExecutionEntity entity = executionRepo.findById(executionId)
@@ -98,13 +105,17 @@ public class WorkflowTraceService {
 
         executionRepo.save(entity);
         log.error("Workflow execution failed: executionId={}, error={}", executionId, errorMessage);
+
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_WORKFLOW_COMPLETE)
+            .executionId(executionId)
+            .status("FAILED")
+            .metadata(Map.of("errorMessage", errorMessage))
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendWorkflowEvent(event);
     }
 
-    // ==================== 节点执行追踪 ====================
-
-    /**
-     * 记录节点开始执行
-     */
     @Transactional
     public NodeExecutionTraceEntity startNodeExecution(Long executionId, String nodeId,
                                                         String nodeType, String nodeRole,
@@ -124,12 +135,22 @@ public class WorkflowTraceService {
         NodeExecutionTraceEntity saved = nodeTraceRepo.save(entity);
         log.debug("Node execution started: traceId={}, nodeId={}", saved.getId(), nodeId);
 
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_NODE_START)
+            .executionId(executionId)
+            .nodeId(nodeId)
+            .nodeTraceId(saved.getId())
+            .status("RUNNING")
+            .executionOrder(executionOrder)
+            .stepType(nodeRole)
+            .inputData(input)
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendNodeEvent(event);
+
         return saved;
     }
 
-    /**
-     * 记录节点执行成功
-     */
     @Transactional
     public void markNodeSuccess(Long traceId, Map<String, Object> output) {
         NodeExecutionTraceEntity entity = nodeTraceRepo.findById(traceId)
@@ -141,11 +162,20 @@ public class WorkflowTraceService {
         entity.setDurationMs(calculateDuration(entity.getStartedAt(), entity.getEndedAt()));
 
         nodeTraceRepo.save(entity);
+
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_NODE_COMPLETE)
+            .executionId(entity.getExecutionId())
+            .nodeId(entity.getNodeId())
+            .nodeTraceId(traceId)
+            .status("SUCCESS")
+            .executionOrder(entity.getExecutionOrder())
+            .outputData(output)
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendNodeEvent(event);
     }
 
-    /**
-     * 记录节点执行失败
-     */
     @Transactional
     public void markNodeFailed(Long traceId, String errorMessage, String errorStack) {
         NodeExecutionTraceEntity entity = nodeTraceRepo.findById(traceId)
@@ -158,11 +188,23 @@ public class WorkflowTraceService {
         entity.setDurationMs(calculateDuration(entity.getStartedAt(), entity.getEndedAt()));
 
         nodeTraceRepo.save(entity);
+
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_NODE_COMPLETE)
+            .executionId(entity.getExecutionId())
+            .nodeId(entity.getNodeId())
+            .nodeTraceId(traceId)
+            .status("FAILED")
+            .executionOrder(entity.getExecutionOrder())
+            .metadata(Map.of(
+                "errorMessage", errorMessage,
+                "errorStack", errorStack != null ? errorStack : ""
+            ))
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendNodeEvent(event);
     }
 
-    /**
-     * 记录节点被跳过
-     */
     @Transactional
     public void markNodeSkipped(Long traceId, String reason) {
         NodeExecutionTraceEntity entity = nodeTraceRepo.findById(traceId)
@@ -172,24 +214,35 @@ public class WorkflowTraceService {
         entity.setErrorMessage(reason);
 
         nodeTraceRepo.save(entity);
+
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_NODE_COMPLETE)
+            .executionId(entity.getExecutionId())
+            .nodeId(entity.getNodeId())
+            .nodeTraceId(traceId)
+            .status("SKIPPED")
+            .executionOrder(entity.getExecutionOrder())
+            .metadata(Map.of("reason", reason))
+            .timestamp(Instant.now())
+            .build();
+        mqService.sendNodeEvent(event);
     }
 
-    // ==================== AI 步骤追踪 ====================
-
-    /**
-     * 记录 AI 步骤执行
-     */
     @Transactional
-    public AiStepExecutionEntity recordAiStep(Long nodeTraceId, String stepId, String stepType,
+    public AiStepExecutionEntity recordAiStep(Long nodeTraceId, Long executionId, String stepId, String stepType,
                                               int round, String status, long durationMs,
                                               String modelName, String inputContent,
                                               String outputContent, Map<String, Object> varsSnapshot) {
+        Instant now = Instant.now();
         AiStepExecutionEntity entity = new AiStepExecutionEntity();
         entity.setNodeTraceId(nodeTraceId);
+        entity.setExecutionId(executionId);
         entity.setStepId(stepId);
         entity.setStepType(stepType);
         entity.setRound(round);
         entity.setStatus(status);
+        entity.setStartedAt(now);
+        entity.setEndedAt(now.plusMillis(durationMs));
         entity.setDurationMs(durationMs);
         entity.setModelName(modelName);
         entity.setInputContent(inputContent);
@@ -199,14 +252,27 @@ public class WorkflowTraceService {
         AiStepExecutionEntity saved = aiStepRepo.save(entity);
         log.trace("AI step recorded: stepId={}, round={}", stepId, round);
 
+        WorkflowTraceEvent event = WorkflowTraceEvent.builder()
+            .eventType(WorkflowTraceEvent.EVENT_AI_STEP)
+            .executionId(executionId)
+            .nodeTraceId(nodeTraceId)
+            .status(status)
+            .round(round)
+            .stepType(stepType)
+            .inputData(varsSnapshot)
+            .outputData(Map.of(
+                "modelName", modelName != null ? modelName : "",
+                "durationMs", durationMs,
+                "inputContent", inputContent != null ? inputContent : "",
+                "outputContent", outputContent != null ? outputContent : ""
+            ))
+            .timestamp(now)
+            .build();
+        mqService.sendAiStepEvent(event);
+
         return saved;
     }
 
-    // ==================== 查询方法 ====================
-
-    /**
-     * 获取工作流的所有执行记录
-     */
     public List<WorkflowExecutionEntity> getExecutions(String workflowId, int limit) {
         return executionRepo.findByWorkflowIdOrderByCreatedAtDesc(workflowId)
                 .stream()
@@ -214,23 +280,18 @@ public class WorkflowTraceService {
                 .toList();
     }
 
-    /**
-     * 获取某次执行的所有节点轨迹
-     */
     public List<NodeExecutionTraceEntity> getNodeTraces(Long executionId) {
         return nodeTraceRepo.findByExecutionIdOrderByExecutionOrder(executionId);
     }
 
-    /**
-     * 获取某个节点的所有 AI 步骤轨迹
-     */
     public List<AiStepExecutionEntity> getAiSteps(Long nodeTraceId) {
         return aiStepRepo.findByNodeTraceIdOrderByRound(nodeTraceId);
     }
 
-    /**
-     * 获取执行统计信息
-     */
+    public List<AiStepExecutionEntity> getAiStepsByExecutionId(Long executionId) {
+        return aiStepRepo.findByExecutionIdOrderByCreatedAt(executionId);
+    }
+
     public ExecutionStats getStats(String workflowId) {
         List<WorkflowExecutionEntity> executions = executionRepo.findByWorkflowId(workflowId);
 
@@ -243,7 +304,6 @@ public class WorkflowTraceService {
                 .filter(e -> "FAILED".equals(e.getStatus()))
                 .count());
 
-        // 计算平均耗时
         stats.setAvgDurationMs(executions.stream()
                 .filter(e -> e.getTotalDurationMs() != null)
                 .mapToLong(WorkflowExecutionEntity::getTotalDurationMs)
@@ -253,8 +313,6 @@ public class WorkflowTraceService {
         return stats;
     }
 
-    // ==================== 工具方法 ====================
-
     private long calculateDuration(Instant start, Instant end) {
         if (start == null || end == null) {
             return 0L;
@@ -262,9 +320,6 @@ public class WorkflowTraceService {
         return java.time.Duration.between(start, end).toMillis();
     }
 
-    /**
-     * 执行统计 DTO
-     */
     @lombok.Data
     public static class ExecutionStats {
         private long total;

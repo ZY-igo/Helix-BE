@@ -11,4 +11,6 @@ import java.util.List;
 public interface AiStepExecutionRepository extends JpaRepository<AiStepExecutionEntity, Long> {
 
     List<AiStepExecutionEntity> findByNodeTraceIdOrderByRound(Long nodeTraceId);
+
+    List<AiStepExecutionEntity> findByExecutionIdOrderByCreatedAt(Long executionId);
 }

@@ -2,8 +2,13 @@ package com.sipc115.helix.integration.workflow.node.logic;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
+import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
 import com.sipc115.helix.integration.expression.CompiledExpression;
-import com.sipc115.helix.integration.workflow.runtime.*;
+import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
+import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
+import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
+import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
+import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -12,11 +17,11 @@ import java.util.Map;
 @Component
 public class ConditionNodeExecutor implements WorkflowNodeExecutor {
 
-    private final TransitionResolver transitionResolver;
+    private static WorkflowTraceService traceService;
 
     @Autowired
-    public ConditionNodeExecutor(TransitionResolver transitionResolver) {
-        this.transitionResolver = transitionResolver;
+    public void setTraceService(WorkflowTraceService traceService) {
+        ConditionNodeExecutor.traceService = traceService;
     }
 
     @Override
@@ -26,6 +31,22 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
 
     @Override
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
+        NodeExecutionTraceEntity trace = null;
+        if (traceService != null && context.getExecutionId() != null) {
+            try {
+                trace = traceService.startNodeExecution(
+                    context.getExecutionId(),
+                    node.getId(),
+                    node.getType().name(),
+                    "NORMAL",
+                    context.getExecutionOrder(),
+                    context.getVariables()
+                );
+                context.setCurrentNodeTraceId(trace.getId());
+            } catch (Exception e) {
+            }
+        }
+
         String branchKey;
 
         Map<String, Object> config = node.getConfig();
@@ -45,6 +66,13 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
 
         NodeExecutionResult result = NodeExecutionResult.completed();
         result.setBranchKey(branchKey);
+
+        if (traceService != null && trace != null) {
+            try {
+                traceService.markNodeSuccess(trace.getId(), result.getOutput());
+            } catch (Exception e) {
+            }
+        }
 
         return result;
     }

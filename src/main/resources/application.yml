@@ -11,6 +11,14 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+          order_updates: true
+        cache:
+          use_second_level_cache: false
   elasticsearch:
     uris:
       - http://192.168.115.23:9200
@@ -20,7 +28,12 @@ spring:
         size: 4
       thread-name-prefix: helix-scheduler-
 
-# Temporal 配置
+rocketmq:
+  name-server: 192.168.115.23:9876
+  producer:
+    group: workflow-trace-group
+    send-message-timeout: 3000
+
 temporal:
   namespace: default
   connection:

@@ -29,7 +29,7 @@ public class WorkflowExecutionRequest {
      * <p>
      * 标识工作流定义的版本，用于查找对应版本的执行计划。
      */
-    private Integer workflowVersion;
+    private String workflowVersion;
     
     /**
      * 输入参数

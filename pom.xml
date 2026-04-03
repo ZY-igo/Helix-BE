@@ -59,13 +59,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-        <!-- Temporal SDK -->
         <dependency>
             <groupId>io.temporal</groupId>
             <artifactId>temporal-sdk</artifactId>
             <version>${temporal-sdk.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.2.3</version>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -87,7 +90,6 @@
             <version>1.18.30</version>
             <scope>provided</scope>
         </dependency>
-        <!-- Aviator 表达式引擎 -->
         <dependency>
             <groupId>com.googlecode.aviator</groupId>
             <artifactId>aviator</artifactId>

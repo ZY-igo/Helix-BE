@@ -131,8 +131,8 @@ public class WorkflowPersistenceService {
      * @return 执行计划对象（如果不存在返回 Optional.empty()）
      */
     @Transactional(readOnly = true)
-    public Optional<ExecutionPlan> findExecutionPlan(String workflowId, Integer version) {
-        return planRepository.findByWorkflowIdAndVersion(workflowId, String.valueOf(version))
+    public Optional<ExecutionPlan> findExecutionPlan(String workflowId, String version) {
+        return planRepository.findByWorkflowIdAndVersion(workflowId, version)
                 .map(this::toDomain);
     }
 

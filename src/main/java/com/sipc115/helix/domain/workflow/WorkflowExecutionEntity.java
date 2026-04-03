@@ -29,8 +29,8 @@ public class WorkflowExecutionEntity {
     /**
      * DSL 版本号
      */
-    @Column(nullable = false)
-    private Integer version;
+    @Column(nullable = false, length = 32)
+    private String version;
 
     /**
      * 执行状态：RUNNING, SUCCESS, FAILED, CANCELLED

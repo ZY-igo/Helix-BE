@@ -13,7 +13,7 @@ public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecu
 
     List<WorkflowExecutionEntity> findByWorkflowId(String workflowId);
 
-    Optional<WorkflowExecutionEntity> findByWorkflowIdAndVersion(String workflowId, Integer version);
+    Optional<WorkflowExecutionEntity> findByWorkflowIdAndVersion(String workflowId, String version);
 
     List<WorkflowExecutionEntity> findByWorkflowIdOrderByCreatedAtDesc(String workflowId);
 }
