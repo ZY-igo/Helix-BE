@@ -15,7 +15,7 @@ CREATE TABLE workflow_dsl (
     workflow_id VARCHAR(64) NOT NULL,
 
     -- 版本号
-    version INTEGER NOT NULL,
+    version VARCHAR(32) NOT NULL,
 
     -- DSL 内容（JSON 格式）
     dsl_content JSONB NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE execution_plan (
     workflow_id VARCHAR(64) NOT NULL,
 
     -- 关联的版本号
-    version INTEGER NOT NULL,
+    version VARCHAR(32) NOT NULL,
 
     -- 执行计划内容（JSON 格式）
     plan_content JSONB NOT NULL,

@@ -85,7 +85,7 @@ public class WorkflowPersistenceService {
      */
     @Transactional(readOnly = true)
     public Optional<WorkflowDsl> findDsl(String workflowId, Integer version) {
-        return dslRepository.findByWorkflowIdAndVersion(workflowId, version)
+        return dslRepository.findByWorkflowIdAndVersion(workflowId, String.valueOf(version))
                 .map(this::toDomain);
     }
 
@@ -132,7 +132,7 @@ public class WorkflowPersistenceService {
      */
     @Transactional(readOnly = true)
     public Optional<ExecutionPlan> findExecutionPlan(String workflowId, Integer version) {
-        return planRepository.findByWorkflowIdAndVersion(workflowId, version)
+        return planRepository.findByWorkflowIdAndVersion(workflowId, String.valueOf(version))
                 .map(this::toDomain);
     }
 

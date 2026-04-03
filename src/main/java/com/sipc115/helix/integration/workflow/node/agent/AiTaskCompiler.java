@@ -1,7 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent;
 
-import com.sipc115.helix.expression.ExpressionEngine;
+import com.sipc115.helix.integration.expression.ExpressionEngine;
 import com.sipc115.helix.integration.workflow.node.agent.spi.StepDefinition;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;

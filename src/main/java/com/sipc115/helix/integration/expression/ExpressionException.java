@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.expression;
+package com.sipc115.helix.integration.expression;
 
 /**
  * 表达式异常

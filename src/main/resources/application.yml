@@ -14,6 +14,11 @@ spring:
   elasticsearch:
     uris:
       - http://192.168.115.23:9200
+  task:
+    scheduling:
+      pool:
+        size: 4
+      thread-name-prefix: helix-scheduler-
 
 # Temporal 配置
 temporal:

@@ -3,7 +3,7 @@ package com.sipc115.helix.integration.workflow.node.condition;
 
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
-import com.sipc115.helix.expression.CompiledExpression;
+import com.sipc115.helix.integration.expression.CompiledExpression;
 import com.sipc115.helix.integration.workflow.runtime.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

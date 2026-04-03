@@ -4,7 +4,7 @@ package com.sipc115.helix.integration.workflow.node.condition;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
 import com.sipc115.helix.domain.workflow.DslNodeType;
-import com.sipc115.helix.expression.CompiledExpression;
+import com.sipc115.helix.integration.expression.CompiledExpression;
 import com.sipc115.helix.integration.workflow.compiler.CompileContext;
 import com.sipc115.helix.integration.workflow.compiler.NodeCompiler;
 import org.slf4j.Logger;

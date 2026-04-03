@@ -33,9 +33,11 @@ public class WorkflowDslEntity {
 
     /**
      * 版本号
+     * <p>
+     * 支持语义化版本，如 "v1.0.0", "v2.0-beta", "1.0.1"
      */
-    @Column(name = "version", nullable = false)
-    private Integer version;
+    @Column(name = "version", nullable = false, length = 32)
+    private String version;
 
     /**
      * DSL 内容（JSON 格式）

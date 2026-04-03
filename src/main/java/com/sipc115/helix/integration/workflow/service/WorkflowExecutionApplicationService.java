@@ -131,13 +131,13 @@ public class WorkflowExecutionApplicationService {
         // ① 尝试从数据库读取（新方式）
         java.util.Optional<ExecutionPlan> dbPlan = persistenceService.findExecutionPlan(workflowId, version);
         if (dbPlan.isPresent()) {
-            logger.info("✅ 从数据库加载执行计划。workflowId={}, version={}", workflowId, version);
+            logger.info("从数据库加载执行计划。workflowId={}, version={}", workflowId, version);
             return dbPlan;
         }
 
         // ② 回退到内存仓库（向后兼容）
-        logger.warn("⚠️ 数据库未找到，回退到内存仓库。workflowId={}, version={}", workflowId, version);
-        return executionPlanRepository.findByWorkflowIdAndVersion(workflowId, version);
+        logger.warn("数据库未找到，回退到内存仓库。workflowId={}, version={}", workflowId, version);
+        return executionPlanRepository.findByWorkflowIdAndVersion(workflowId, String.valueOf(version));
     }
 
     /**

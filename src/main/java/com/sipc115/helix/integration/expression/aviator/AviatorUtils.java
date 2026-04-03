@@ -1,22 +1,20 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.expression.aviator;
+package com.sipc115.helix.integration.expression.aviator;
 
 import com.googlecode.aviator.AviatorEvaluator;
 import com.googlecode.aviator.Expression;
-import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
 /**
- * Aviator 表达式引擎服务
+ * Aviator 表达式引擎工具类
  * <p>
- * 封装 Aviator 表达式引擎的核心功能，提供表达式的编译、执行和管理。
+ * 提供 Aviator 表达式引擎的常用操作方法，方便在项目中直接使用。
  * 
  * @author Helix Team
  * @since 2.0.0
  */
-@Service
-public class AviatorService {
+public class AviatorUtils {
 
     /**
      * 执行表达式
@@ -27,7 +25,7 @@ public class AviatorService {
      * @param env 表达式执行环境（变量映射）
      * @return 表达式执行结果
      */
-    public Object execute(String expression, Map<String, Object> env) {
+    public static Object execute(String expression, Map<String, Object> env) {
         return AviatorEvaluator.execute(expression, env);
     }
 
@@ -39,7 +37,7 @@ public class AviatorService {
      * @param expression 表达式字符串
      * @return 编译后的 Expression 对象
      */
-    public Expression compile(String expression) {
+    public static Expression compile(String expression) {
         return AviatorEvaluator.compile(expression);
     }
 
@@ -52,7 +50,7 @@ public class AviatorService {
      * @param env 表达式执行环境（变量映射）
      * @return 表达式执行结果
      */
-    public Object executeCompiled(Expression compiledExpression, Map<String, Object> env) {
+    public static Object executeCompiled(Expression compiledExpression, Map<String, Object> env) {
         return compiledExpression.execute(env);
     }
 
@@ -65,7 +63,7 @@ public class AviatorService {
      * @param env 表达式执行环境（变量映射）
      * @return 表达式执行结果的布尔值
      */
-    public boolean executeBoolean(String expression, Map<String, Object> env) {
+    public static boolean executeBoolean(String expression, Map<String, Object> env) {
         Object result = execute(expression, env);
         return result instanceof Boolean ? (Boolean) result : false;
     }
@@ -79,20 +77,22 @@ public class AviatorService {
      * @param env 表达式执行环境（变量映射）
      * @return 表达式执行结果的数值
      */
-    public Number executeNumber(String expression, Map<String, Object> env) {
+    public static Number executeNumber(String expression, Map<String, Object> env) {
         Object result = execute(expression, env);
         return result instanceof Number ? (Number) result : null;
     }
-    
+
     /**
-     * 验证表达式语法
+     * 执行表达式并返回字符串结果
      * <p>
-     * 验证表达式的语法是否正确，若语法错误则抛出异常。
+     * 执行表达式并将结果转换为字符串，适用于字符串处理场景。
      * 
      * @param expression 表达式字符串
-     * @throws Exception 当表达式语法错误时抛出
+     * @param env 表达式执行环境（变量映射）
+     * @return 表达式执行结果的字符串
      */
-    public void validateExpression(String expression) throws Exception {
-        AviatorEvaluator.compile(expression);
+    public static String executeString(String expression, Map<String, Object> env) {
+        Object result = execute(expression, env);
+        return result != null ? result.toString() : null;
     }
 }

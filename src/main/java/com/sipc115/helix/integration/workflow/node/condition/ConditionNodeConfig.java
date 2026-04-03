@@ -1,7 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.condition;
 
-import com.sipc115.helix.expression.CompiledExpression;
+import com.sipc115.helix.integration.expression.CompiledExpression;
 import lombok.Data;
 
 /**

@@ -1,8 +1,8 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.expression.aviator;
+package com.sipc115.helix.integration.expression.aviator;
 
 import com.googlecode.aviator.Expression;
-import com.sipc115.helix.expression.CompiledExpression;
+import com.sipc115.helix.integration.expression.CompiledExpression;
 
 import java.util.Map;
 

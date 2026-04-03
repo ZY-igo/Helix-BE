@@ -2,7 +2,7 @@
 package com.sipc115.helix.integration.workflow.compiler;
 
 import com.sipc115.helix.domain.workflow.*;
-import com.sipc115.helix.expression.ExpressionEngine;
+import com.sipc115.helix.integration.expression.ExpressionEngine;
 import com.sipc115.helix.integration.workflow.spi.DslCompiler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +100,10 @@ public class DefaultDslCompiler implements DslCompiler {
             plan.setTransitions(dsl.getEdges().stream().map(this::compileEdge)
                     .collect(Collectors.toList()));
             logger.debug("Compiled {} edges", plan.getTransitions().size());
-            
+
+            // 9. 设置调度信息（如果有）
+            plan.setSchedule(dsl.getSchedule());
+
             logger.info("Compilation completed successfully for workflow: {}", dsl.getWorkflowId());
             return plan;
         } catch (Exception e) {
@@ -295,17 +298,11 @@ public class DefaultDslCompiler implements DslCompiler {
      */
     private Set<String> collectDefinedVariables(WorkflowDsl dsl) {
         Set<String> definedVariables = new HashSet<>();
-        
-        // 收集工作流级别的变量（如果有）
-        Map<String, Object> metadata = dsl.getMetadata();
-        if (metadata != null) {
-            // 检查是否有变量定义
-            Object variables = metadata.get("variables");
-            if (variables instanceof Map) {
-                ((Map<?, ?>) variables).keySet().forEach(key -> definedVariables.add(key.toString()));
-            }
-        }
-        
+
+        // Workflow-level variables are now accessed through WorkflowMetadata
+        // Currently no workflow-level variables are defined in WorkflowMetadata
+        // This can be extended later if needed
+
         // 收集节点级别的变量定义
         for (DslNodeSpec node : dsl.getNodes()) {
             Map<String, Object> config = node.getConfig();

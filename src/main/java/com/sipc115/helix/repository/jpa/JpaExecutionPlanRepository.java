@@ -5,6 +5,7 @@ import com.sipc115.helix.domain.entity.ExecutionPlanEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,10 +17,20 @@ public interface JpaExecutionPlanRepository extends JpaRepository<ExecutionPlanE
     /**
      * 根据工作流 ID 和版本查询
      */
-    Optional<ExecutionPlanEntity> findByWorkflowIdAndVersion(String workflowId, Integer version);
+    Optional<ExecutionPlanEntity> findByWorkflowIdAndVersion(String workflowId, String version);
 
     /**
      * 根据计划 ID 查询
      */
     Optional<ExecutionPlanEntity> findByPlanId(String planId);
+
+    /**
+     * 查询工作流的所有执行计划版本
+     */
+    List<ExecutionPlanEntity> findByWorkflowIdOrderByCreatedAtDesc(String workflowId);
+
+    /**
+     * 查询工作流最新版本的执行计划
+     */
+    Optional<ExecutionPlanEntity> findFirstByWorkflowIdOrderByCreatedAtDesc(String workflowId);
 }

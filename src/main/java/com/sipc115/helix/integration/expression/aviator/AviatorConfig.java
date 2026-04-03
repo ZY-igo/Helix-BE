@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.expression.aviator;
+package com.sipc115.helix.integration.expression.aviator;
 
 import org.springframework.context.annotation.Configuration;
 
