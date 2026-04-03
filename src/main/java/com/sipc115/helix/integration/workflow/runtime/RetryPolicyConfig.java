@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.integration.workflow.runtime.config;
+package com.sipc115.helix.integration.workflow.runtime;
 
 import lombok.Data;
 
