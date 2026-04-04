@@ -127,7 +127,7 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
             Workflow.await(() -> bufferedSignals.stream()
                     .anyMatch(signal -> expectedNodeId.equals(signal.getNodeId())));
         } else {
-            boolean signalReceived = Workflow.await(timeout.toMillis(), TimeUnit.MILLISECONDS,
+            boolean signalReceived = Workflow.await(Duration.ofMillis(timeout.toMillis()),
                     () -> bufferedSignals.stream()
                             .anyMatch(signal -> expectedNodeId.equals(signal.getNodeId())));
 

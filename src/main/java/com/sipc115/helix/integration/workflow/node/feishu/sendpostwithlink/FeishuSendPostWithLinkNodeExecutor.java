@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
+import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -94,7 +95,7 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
                 context.getExecutionId(),
                 node.getId(),
                 node.getType().name(),
-                "NORMAL",
+                NodeRoleConstants.NORMAL,
                 context.getExecutionOrder(),
                 context.getVariables()
             );

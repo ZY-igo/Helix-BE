@@ -1,6 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.logic.condition;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
+import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.SystemConfigConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -119,16 +122,16 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
         // 步骤1：启动节点追踪
         NodeExecutionTraceEntity trace = null;
-        if (traceService != null && context.getExecutionId() != null) {
-            try {
-                trace = traceService.startNodeExecution(
-                    context.getExecutionId(),
-                    node.getId(),
-                    node.getType().name(),
-                    "NORMAL",
-                    context.getExecutionOrder(),
-                    context.getVariables()
-                );
+                if (traceService != null && context.getExecutionId() != null) {
+                    try {
+                        trace = traceService.startNodeExecution(
+                            context.getExecutionId(),
+                            node.getId(),
+                            node.getType().name(),
+                            NodeRoleConstants.NORMAL,
+                            context.getExecutionOrder(),
+                            context.getVariables()
+                        );
                 context.setCurrentNodeTraceId(trace.getId());
             } catch (Exception e) {
                 log.warn("启动节点追踪失败: {}", e.getMessage());
@@ -148,19 +151,19 @@ public class ConditionNodeExecutor implements WorkflowNodeExecutor {
                 // 使用当前上下文变量执行表达式
                 Boolean evalResult = (Boolean) compiledExpr.execute(context.getVariables());
                 // 将布尔结果转换为分支键
-                branchKey = evalResult ? "true" : "false";
+                branchKey = evalResult ? BranchKeyConstants.TRUE : BranchKeyConstants.FALSE;
                 log.debug("条件表达式求值结果: nodeId={}, result={}, branchKey={}",
                     node.getId(), evalResult, branchKey);
             } catch (Exception e) {
                 // 求值失败，使用默认分支
                 log.warn("条件表达式求值失败，使用默认分支: nodeId={}, error={}",
                     node.getId(), e.getMessage());
-                branchKey = String.valueOf(config.getOrDefault("defaultBranch", "true"));
+                branchKey = String.valueOf(config.getOrDefault("defaultBranch", SystemConfigConstants.DEFAULT_CONDITION_BRANCH));
             }
         } else {
             // 配置中没有表达式，使用默认分支
             log.warn("条件节点缺少编译表达式，使用默认分支: nodeId={}", node.getId());
-            branchKey = String.valueOf(config.getOrDefault("defaultBranch", "true"));
+            branchKey = String.valueOf(config.getOrDefault("defaultBranch", SystemConfigConstants.DEFAULT_CONDITION_BRANCH));
         }
 
         // 步骤4：构建执行结果

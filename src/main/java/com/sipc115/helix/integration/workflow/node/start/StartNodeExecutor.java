@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.start;
 
+import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -35,7 +36,7 @@ public class StartNodeExecutor implements WorkflowNodeExecutor {
                     context.getExecutionId(),
                     node.getId(),
                     node.getType().name(),
-                    "START",
+                    NodeRoleConstants.START,
                     context.getExecutionOrder(),
                     context.getVariables()
                 );

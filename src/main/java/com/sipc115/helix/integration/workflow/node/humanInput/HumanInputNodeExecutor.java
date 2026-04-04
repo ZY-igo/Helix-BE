@@ -1,6 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.humanInput;
 
+import com.sipc115.helix.common.constant.ExecutionStatusConstants;
+import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.SystemConfigConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionStatus;
@@ -122,13 +125,13 @@ public class HumanInputNodeExecutor implements WorkflowNodeExecutor {
         if (traceService != null && context.getExecutionId() != null) {
             try {
                 trace = traceService.startNodeExecution(
-                    context.getExecutionId(),
-                    node.getId(),
-                    node.getType().name(),
-                    "NORMAL",
-                    context.getExecutionOrder(),
-                    context.getVariables()
-                );
+                            context.getExecutionId(),
+                            node.getId(),
+                            node.getType().name(),
+                            NodeRoleConstants.NORMAL,
+                            context.getExecutionOrder(),
+                            context.getVariables()
+                        );
                 context.setCurrentNodeTraceId(trace.getId());
             } catch (Exception e) {
                 log.warn("启动节点追踪失败: {}", e.getMessage());
@@ -197,16 +200,14 @@ public class HumanInputNodeExecutor implements WorkflowNodeExecutor {
     private Duration parseTimeout(Map<String, Object> config) {
         Object timeoutValue = config.get("timeout");
         if (timeoutValue == null) {
-            return Duration.ofHours(24);
+            return Duration.ofHours(SystemConfigConstants.DEFAULT_TIMEOUT_HOURS);
         }
 
-        // 支持数字类型（秒）
         if (timeoutValue instanceof Number) {
             long seconds = ((Number) timeoutValue).longValue();
             return Duration.ofSeconds(seconds);
         }
 
-        // 支持字符串类型（带单位或不带）
         if (timeoutValue instanceof String) {
             String str = ((String) timeoutValue).trim().toLowerCase();
             if (str.endsWith("h")) {
@@ -220,6 +221,6 @@ public class HumanInputNodeExecutor implements WorkflowNodeExecutor {
             }
         }
 
-        return Duration.ofHours(24);
+        return Duration.ofHours(SystemConfigConstants.DEFAULT_TIMEOUT_HOURS);
     }
 }

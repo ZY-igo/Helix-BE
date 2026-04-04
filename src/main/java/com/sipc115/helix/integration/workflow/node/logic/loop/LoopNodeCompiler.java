@@ -1,5 +1,6 @@
 package com.sipc115.helix.integration.workflow.node.logic.loop;
 
+import com.sipc115.helix.common.constant.SystemConfigConstants;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.integration.expression.CompiledExpression;
@@ -76,12 +77,12 @@ public class LoopNodeCompiler implements NodeCompiler {
 
         String loopVariable = (String) compiledConfig.get("loopVariable");
         if (loopVariable == null || loopVariable.isEmpty()) {
-            compiledConfig.put("loopVariable", "iteration");
+            compiledConfig.put("loopVariable", SystemConfigConstants.DEFAULT_LOOP_VARIABLE);
         }
 
         String resultVariable = (String) compiledConfig.get("resultVariable");
         if (resultVariable == null || resultVariable.isEmpty()) {
-            compiledConfig.put("resultVariable", "loopResult");
+            compiledConfig.put("resultVariable", SystemConfigConstants.DEFAULT_RESULT_VARIABLE);
         }
 
         node.setConfig(compiledConfig);

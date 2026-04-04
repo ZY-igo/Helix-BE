@@ -14,7 +14,7 @@ import java.util.Map;
  * 工作流追踪事件模型
  * <p>
  * 用于在 RocketMQ 中传输工作流执行追踪事件，采用事件溯源模式记录工作流执行过程中的关键节点。
- * 支持三种级别的追踪事件：工作流级(L1)、节点级(L2)、AI步骤级(L3)。
+ * 支持两种级别的追踪事件：工作流级(L1)、节点级(L2)。
  *
  * <h3>事件类型说明：</h3>
  * <ul>
@@ -22,7 +22,6 @@ import java.util.Map;
  *   <li>{@link #EVENT_WORKFLOW_COMPLETE} - 工作流完成事件</li>
  *   <li>{@link #EVENT_NODE_START} - 节点开始执行事件</li>
  *   <li>{@link #EVENT_NODE_COMPLETE} - 节点完成执行事件</li>
- *   <li>{@link #EVENT_AI_STEP} - AI步骤执行事件</li>
  * </ul>
  *
  * <h3>使用示例：</h3>
@@ -76,14 +75,6 @@ public class WorkflowTraceEvent implements Serializable {
      * 当节点执行完成时触发（包括成功、失败、跳过），记录节点输出或错误信息。
      */
     public static final String EVENT_NODE_COMPLETE = "NODE_COMPLETE";
-
-    /**
-     * AI步骤执行事件
-     * <p>
-     * 当AI任务节点内部的微流程步骤执行时触发，用于追踪多轮对话等AI执行细节。
-     * 支持批量发送以提高性能。
-     */
-    public static final String EVENT_AI_STEP = "AI_STEP";
 
     // ==================== 事件字段 ====================
 
@@ -139,22 +130,6 @@ public class WorkflowTraceEvent implements Serializable {
      * 用于分析工作流执行路径和性能瓶颈。
      */
     private Integer executionOrder;
-
-    /**
-     * 轮次号
-     * <p>
-     * 用于标识AI任务中的多轮迭代序号，从1开始。
-     * 例如多轮对话中，第一轮为1，第二轮为2，以此类推。
-     */
-    private Integer round;
-
-    /**
-     * 步骤类型
-     * <p>
-     * 标识AI步骤的具体类型，如 "GENERATE"、"VALIDATE"、"CHAT" 等。
-     * 用于细分AI执行过程中的不同阶段。
-     */
-    private String stepType;
 
     /**
      * 输入数据
