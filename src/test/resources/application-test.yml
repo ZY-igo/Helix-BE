@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+app:
+  encryption:
+    master-key: test-master-key-for-unit-tests-only
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: test-producer-group
+  consumer:
+    group: test-consumer-group
+
+logging:
+  level:
+    com.sipc115.helix: DEBUG
