@@ -17,11 +17,14 @@ public class LoopResult {
 
     private String exitReason;
 
+    private boolean success;
+
     public Map<String, Object> toOutput() {
         return Map.of(
                 "iterations", iterations,
                 "lastResult", lastResult != null ? lastResult : "null",
-                "exitReason", exitReason
+                "exitReason", exitReason,
+                "success", success
         );
     }
 }

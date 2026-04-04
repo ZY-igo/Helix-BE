@@ -100,7 +100,7 @@ public class RocketMQProducer {
                 }
 
                 @Override
-                public void onException(Exception e) {
+                public void onException(Throwable e) {
                     log.error("消息发送异常: topic={}, tags={}, error={}",
                             topic, tags, e.getMessage());
                     pendingMessages.remove(body);

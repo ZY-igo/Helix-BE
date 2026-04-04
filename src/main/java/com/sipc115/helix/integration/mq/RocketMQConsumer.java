@@ -52,7 +52,7 @@ public class RocketMQConsumer {
 
         consumer.registerMessageListener(new MessageListenerConcurrently() {
             @Override
-            public ConsumeConcurrentlyStatus consume(List<MessageExt> msgs,
+            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs,
                                                       ConsumeConcurrentlyContext context) {
                 if (msgs == null || msgs.isEmpty()) {
                     return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;

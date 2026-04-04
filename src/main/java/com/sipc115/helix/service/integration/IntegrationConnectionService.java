@@ -175,25 +175,27 @@ public class IntegrationConnectionService {
             return null;
         }
 
+        Map<String, Object> mutableConfig = new java.util.HashMap<>(config);
+
         switch (type) {
             case IntegrationConnection.Type.FEISHU -> {
-                if (config.containsKey("appSecret")) {
-                    config.put("appSecret", encryptionService.encrypt((String) config.get("appSecret")));
+                if (mutableConfig.containsKey("appSecret")) {
+                    mutableConfig.put("appSecret", encryptionService.encrypt((String) mutableConfig.get("appSecret")));
                 }
             }
             case IntegrationConnection.Type.LLM -> {
-                if (config.containsKey("apiKey")) {
-                    config.put("apiKey", encryptionService.encrypt((String) config.get("apiKey")));
+                if (mutableConfig.containsKey("apiKey")) {
+                    mutableConfig.put("apiKey", encryptionService.encrypt((String) mutableConfig.get("apiKey")));
                 }
             }
             case IntegrationConnection.Type.MYSQL -> {
-                if (config.containsKey("password")) {
-                    config.put("password", encryptionService.encrypt((String) config.get("password")));
+                if (mutableConfig.containsKey("password")) {
+                    mutableConfig.put("password", encryptionService.encrypt((String) mutableConfig.get("password")));
                 }
             }
         }
 
-        return config;
+        return mutableConfig;
     }
 
     private void saveHistory(IntegrationConnection conn, String changeType, String changedBy) {

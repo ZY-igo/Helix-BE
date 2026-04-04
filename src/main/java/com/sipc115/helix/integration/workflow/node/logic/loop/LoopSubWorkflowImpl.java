@@ -60,7 +60,7 @@ public class LoopSubWorkflowImpl implements LoopSubWorkflow {
             log.info("Loop reached max iterations: {}", maxRounds);
         }
 
-        return new LoopResult(iteration, lastResult, exitReason);
+        return new LoopResult(iteration, lastResult, exitReason, iteration > 0);
     }
 
     private boolean shouldExit(Map<String, Object> input, Object lastResult) {
