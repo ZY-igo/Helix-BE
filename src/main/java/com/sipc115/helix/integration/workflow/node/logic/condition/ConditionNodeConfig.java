@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.workflow.node.logic;
+package com.sipc115.helix.integration.workflow.node.logic.condition;
 
 import com.sipc115.helix.integration.expression.CompiledExpression;
 import lombok.Data;

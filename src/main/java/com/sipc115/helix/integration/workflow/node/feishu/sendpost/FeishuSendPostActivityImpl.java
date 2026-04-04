@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.workflow.node.feishu;
+package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
 import com.sipc115.helix.integration.lark.FeishuClient;
 import org.slf4j.Logger;

@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.workflow.node.feishu;
+package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
 import io.temporal.activity.ActivityInterface;
 

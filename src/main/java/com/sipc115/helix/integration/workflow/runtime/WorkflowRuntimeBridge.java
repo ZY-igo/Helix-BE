@@ -27,15 +27,27 @@ import java.time.Duration;
 public interface WorkflowRuntimeBridge {
 
     /**
-     * 等待人工信号
+     * 等待人工信号（无超时）
      * <p>
      * 暂停工作流执行，直到接收到指定节点的人工输入信号。
-     * 此方法会阻塞工作流执行，直到信号到达。
+     * 此方法会无限等待信号到达。
      *
      * @param expectedNodeId 期望接收信号的节点 ID
      * @return 人工输入的有效载荷，包含节点 ID 和输入数据
      */
     HumanSignalPayload awaitHumanSignal(String expectedNodeId);
+
+    /**
+     * 等待人工信号（带超时）
+     * <p>
+     * 暂停工作流执行，直到接收到指定节点的人工输入信号或超过指定超时时间。
+     * 如果超时，将返回 null 调用方需要处理超时情况。
+     *
+     * @param expectedNodeId 期望接收信号的节点 ID
+     * @param timeout 最大等待时间，如果为 null 则表示无限等待
+     * @return 人工输入的有效载荷，超时返回 null
+     */
+    HumanSignalPayload awaitHumanSignal(String expectedNodeId, Duration timeout);
 
     /**
      * 持久化睡眠

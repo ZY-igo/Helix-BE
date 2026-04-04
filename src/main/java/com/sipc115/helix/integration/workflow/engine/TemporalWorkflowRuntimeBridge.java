@@ -8,7 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Temporal 工作流运行时实现（纯原语版本）
@@ -39,7 +40,7 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
      * 用于存储在工作流等待期间到达的信号，确保信号不会丢失。
      * 当工作流调用 awaitHumanSignal 时，会从此队列中查找匹配的信号。
      */
-    private final List<HumanSignalPayload> bufferedSignals;
+    private final java.util.List<HumanSignalPayload> bufferedSignals;
 
     /**
      * Activity 工厂实例
@@ -55,9 +56,8 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
      *
      * @param bufferedSignals 缓冲的人工输入信号队列
      */
-    public TemporalWorkflowRuntimeBridge(List<HumanSignalPayload> bufferedSignals) {
+    public TemporalWorkflowRuntimeBridge(java.util.List<HumanSignalPayload> bufferedSignals) {
         this.bufferedSignals = bufferedSignals;
-        // 创建工厂实例
         this.activityFactory = new TemporalActivityFactory();
     }
 
@@ -75,7 +75,7 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
     }
 
     /**
-     * 等待人工信号
+     * 等待人工信号（无超时）
      * <p>
      * 暂停工作流执行，直到接收到指定节点的人工输入信号。
      * 使用 Temporal 的 {@link Workflow#await(java.util.function.Supplier)} 机制实现非阻塞等待。
@@ -92,23 +92,62 @@ public class TemporalWorkflowRuntimeBridge implements WorkflowRuntimeBridge {
      */
     @Override
     public HumanSignalPayload awaitHumanSignal(String expectedNodeId) {
-        logger.info("Awaiting human signal for node: {}", expectedNodeId);
+        return awaitHumanSignal(expectedNodeId, null);
+    }
 
-        // 使用 Temporal 的 await 机制等待信号
-        // 此调用是非阻塞的，工作流会持久化状态并等待条件满足
-        Workflow.await(() -> bufferedSignals.stream()
-                .anyMatch(signal -> expectedNodeId.equals(signal.getNodeId())));
+    /**
+     * 等待人工信号（带超时）
+     * <p>
+     * 暂停工作流执行，直到接收到指定节点的人工输入信号或超过指定超时时间。
+     * 使用 Temporal 的 {@link Workflow#await(Duration, java.util.function.Supplier)} 机制实现超时等待。
+     * <p>
+     * 工作流程：
+     * <ol>
+     *   <li>使用 Workflow.await 等待 bufferedSignals 中出现匹配的信号</li>
+     *   <li>如果超时时间内没有找到匹配信号，返回 null</li>
+     *   <li>找到匹配信号后，从队列中移除并返回</li>
+     * </ol>
+     *
+     * <p>超时配置说明：
+     * <ul>
+     *   <li>timeout 为 null：无限等待，直到信号到达</li>
+     *   <li>timeout 为 Duration.ZERO 或负数：立即检查并返回，不等待</li>
+     *   <li>timeout 为正数：等待指定时间后超时</li>
+     * </ul>
+     *
+     * @param expectedNodeId 期望接收信号的节点 ID
+     * @param timeout 最大等待时间，null 表示无限等待
+     * @return 人工输入的有效载荷，超时返回 null
+     */
+    @Override
+    public HumanSignalPayload awaitHumanSignal(String expectedNodeId, Duration timeout) {
+        logger.info("Awaiting human signal for node: {}, timeout: {}", expectedNodeId, timeout);
 
-        // 查找并返回匹配的信号
-        for (HumanSignalPayload payload : bufferedSignals) {
-            if (expectedNodeId.equals(payload.getNodeId())) {
-                bufferedSignals.remove(payload);
-                logger.info("Received human signal for node: {}", expectedNodeId);
-                return payload;
+        if (timeout == null) {
+            Workflow.await(() -> bufferedSignals.stream()
+                    .anyMatch(signal -> expectedNodeId.equals(signal.getNodeId())));
+        } else {
+            boolean signalReceived = Workflow.await(timeout.toMillis(), TimeUnit.MILLISECONDS,
+                    () -> bufferedSignals.stream()
+                            .anyMatch(signal -> expectedNodeId.equals(signal.getNodeId())));
+
+            if (!signalReceived) {
+                logger.warn("Human signal timeout for node: {}, duration: {}", expectedNodeId, timeout);
+                return null;
             }
         }
 
-        // 理论上不会到达这里，因为 await 已经确保信号存在
+        Optional<HumanSignalPayload> payloadOpt = bufferedSignals.stream()
+                .filter(signal -> expectedNodeId.equals(signal.getNodeId()))
+                .findFirst();
+
+        if (payloadOpt.isPresent()) {
+            HumanSignalPayload payload = payloadOpt.get();
+            bufferedSignals.remove(payload);
+            logger.info("Received human signal for node: {}", expectedNodeId);
+            return payload;
+        }
+
         logger.error("Signal arrived but matching payload not found for node: {}", expectedNodeId);
         throw new IllegalStateException("Signal arrived but matching payload not found");
     }

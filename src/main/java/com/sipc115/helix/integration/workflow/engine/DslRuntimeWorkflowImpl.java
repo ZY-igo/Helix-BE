@@ -15,17 +15,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * DSL 杩愯鏃跺伐浣滄祦瀹炵幇绫?
+ * DSL 运行时工作流实现类
  * <p>
- * 鍩轰簬 Temporal 妗嗘灦瀹炵幇鐨勫伐浣滄祦杩愯鏃讹紝璐熻矗鎵ц DSL 瀹氫箟鐨勫伐浣滄祦銆?
- * 鎻愪緵宸ヤ綔娴佺殑鍚姩銆佷俊鍙峰鐞嗗拰鐘舵€佹煡璇㈠姛鑳姐€?
+ * 基于 Temporal 框架实现的工作流运行时，负责执行 DSL 定义的工作流。
+ * 提供工作流的启动、信号处理和状态查询功能。
  */
 public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(DslRuntimeWorkflowImpl.class);
     private static volatile WorkflowTraceService traceService;
 
-    // 瑙ｉ噴鍣ㄥ疄渚嬶紙涓嶆槸 Spring Bean锛?
+    // 解释器实例（不是 Spring Bean）
     private final DslOrchestratorWorkflowImpl interpreter = new DslOrchestratorWorkflowImpl();
 
     public static void setTraceService(WorkflowTraceService traceService) {
@@ -33,7 +33,7 @@ public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
     }
 
     public DslRuntimeWorkflowImpl() {
-        // Temporal 鏃犲弬鏋勯€犲嚱鏁?
+        // Temporal 无参构造函数
     }
 
     @Override
@@ -43,10 +43,10 @@ public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
 
         Long executionId = extractExecutionId(input);
 
-        // 浣跨敤 Temporal 鐨?CancellationScope 鏉ュ鐞嗗伐浣滄祦鍙栨秷
+        // 使用 Temporal 的 CancellationScope 来处理工作流取消
         CancellationScope cancellationScope = Workflow.newCancellationScope(() -> {
             try {
-                // 濮旀墭缁欒В閲婂櫒鎵ц
+                // 委托给解释器执行
                 interpreter.run(plan, input);
                 if (traceService != null && executionId != null) {
                     traceService.markExecutionSuccess(executionId, buildOutputSnapshot());
@@ -61,7 +61,7 @@ public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
             }
         });
 
-        // 鍚姩鍙栨秷浣滅敤鍩熷苟绛夊緟瀹屾垚
+        // 启动取消作用域并等待完成
         cancellationScope.run();
     }
 

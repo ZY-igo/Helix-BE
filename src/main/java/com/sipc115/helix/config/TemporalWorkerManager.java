@@ -3,6 +3,8 @@ package com.sipc115.helix.config;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.integration.workflow.engine.DslRuntimeWorkflowImpl;
+import com.sipc115.helix.integration.workflow.repository.InMemoryExecutionPlanRepository;
+import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
 import io.temporal.client.WorkflowClient;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
@@ -85,6 +87,15 @@ public class TemporalWorkerManager {
     private final List<Object> allActivities;
 
     /**
+     * 执行计划仓库
+     * <p>
+     * 用于存储和管理已注册的工作流执行计划。
+     * 当 Temporal 启动工作流实例时，会从这里获取对应的 ExecutionPlan。
+     * 采用依赖注入获取 InMemoryExecutionPlanRepository 实例。
+     */
+    private final ExecutionPlanRepository executionPlanRepository;
+
+    /**
      * Worker 工厂
      * <p>
      * 用于创建和管理 Worker 实例。
@@ -113,14 +124,19 @@ public class TemporalWorkerManager {
     /**
      * 构造函数
      * <p>
-     * 通过依赖注入获取 WorkflowClient 和所有 Activity 实例。
+     * 通过依赖注入获取 WorkflowClient、ExecutionPlanRepository 和所有 Activity 实例。
      *
      * @param workflowClient Temporal 工作流客户端
+     * @param executionPlanRepository 执行计划仓库
      * @param allActivities 所有 Activity 实例列表
      */
     @Autowired
-    public TemporalWorkerManager(WorkflowClient workflowClient, List<Object> allActivities) {
+    public TemporalWorkerManager(
+            WorkflowClient workflowClient,
+            ExecutionPlanRepository executionPlanRepository,
+            List<Object> allActivities) {
         this.workflowClient = workflowClient;
+        this.executionPlanRepository = executionPlanRepository;
         this.allActivities = allActivities;
     }
 
@@ -146,6 +162,11 @@ public class TemporalWorkerManager {
      *   <li>新启动的实例可以使用新版本</li>
      * </ul>
      *
+     * <p>架构设计说明：
+     * Helix 使用单一通用工作流实现（DslRuntimeWorkflowImpl）来执行所有 DSL 工作流。
+     * 工作流的差异（节点、转换、调度规则等）存储在 ExecutionPlan 中，
+     * 由工作流实现类在运行时解释执行。这种设计避免了为每个工作流版本创建独立的 Worker。
+     *
      * @see DslRuntimeWorkflowImpl
      */
     @PostConstruct
@@ -161,6 +182,7 @@ public class TemporalWorkerManager {
         // 步骤3：注册工作流实现
         // DslRuntimeWorkflowImpl 是 Helix 自定义的工作流实现类
         // 它负责解释执行编译后的 ExecutionPlan
+        // 由于使用通用工作流实现，工作流的具体定义（ExecutionPlan）存储在仓库中
         this.defaultWorker.registerWorkflowImplementationTypes(
             DslRuntimeWorkflowImpl.class
         );
@@ -220,9 +242,18 @@ public class TemporalWorkerManager {
      * <p>注册流程：
      * <ol>
      *   <li>构建工作流唯一标识键（workflowId:version）</li>
-     *   <li>如果是新版本，创建新的 Worker 或更新现有 Worker</li>
-     *   <li>注册工作流定义和相关的 Activity</li>
+     *   <li>验证 ExecutionPlan 的完整性和正确性</li>
+     *   <li>将 ExecutionPlan 保存到仓库（供运行时使用）</li>
+     *   <li>更新内存中的工作流映射</li>
      * </ol>
+     *
+     * <p>架构说明：
+     * Helix 使用通用工作流实现（DslRuntimeWorkflowImpl），因此：
+     * <ul>
+     *   <li>不需要为每个工作流版本创建独立的 Worker</li>
+     *   <li>只需要将 ExecutionPlan 保存到仓库即可</li>
+     *   <li>工作流启动时从仓库获取 ExecutionPlan 并传递给通用实现</li>
+     * </ul>
      *
      * <p>版本管理策略：
      * <ul>
@@ -235,17 +266,26 @@ public class TemporalWorkerManager {
      * @see ExecutionPlan
      */
     public void registerWorkflow(ExecutionPlan plan) {
-        // 构建唯一标识键，格式为 "workflowId:version"
+        // 步骤1：构建唯一标识键，格式为 "workflowId:version"
         // 例如：daily-report:v1.0.0
         String workflowKey = buildWorkflowKey(plan.getWorkflowId(), plan.getWorkflowVersion());
 
         log.info("正在注册工作流: {}", workflowKey);
 
-        // TODO: 实现完整的工作流注册逻辑
-        // 需要考虑：
-        // 1. 是否需要为每个工作流版本创建独立的 Worker
-        // 2. 如何处理 Activity 的注册
-        // 3. 如何与 Spring 的 Bean 管理集成
+        // 步骤2：验证 ExecutionPlan 的完整性
+        validateExecutionPlan(plan, workflowKey);
+
+        // 步骤3：保存到执行计划仓库
+        // 这是核心步骤：工作流启动时会从这里获取 ExecutionPlan
+        executionPlanRepository.save(plan);
+
+        // 步骤4：更新内存中的工作流映射（用于追踪和管理）
+        workflowWorkers.put(workflowKey, defaultWorker);
+
+        log.info("工作流注册完成: {}, 节点数量: {}, 入口节点: {}",
+                workflowKey,
+                plan.getNodes() != null ? plan.getNodes().size() : 0,
+                plan.getEntryNodeId());
     }
 
     /**
@@ -256,9 +296,13 @@ public class TemporalWorkerManager {
      * <p>注销说明：
      * <ul>
      *   <li>正在运行的工作流实例不会受到影响</li>
-     *   <li>新创建的工作流实例将无法使用此版本</li>
+     *   <li>新创建的工作流实例将无法使用此版本（因为仓库中已删除）</li>
      *   <li>建议使用 DEPRECATED 状态而非直接注销</li>
      * </ul>
+     *
+     * <p>实现说明：
+     * 由于 Helix 使用通用工作流实现，注销操作主要是从仓库中删除 ExecutionPlan。
+     * Temporal Worker 本身继续运行，因为它们是通用的。
      *
      * @param workflowId 工作流 ID
      * @param version 工作流版本号
@@ -268,10 +312,14 @@ public class TemporalWorkerManager {
 
         log.info("正在注销工作流: {}", workflowKey);
 
-        // TODO: 实现工作流注销逻辑
-        // 需要考虑：
-        // 1. 如何处理正在运行的工作流实例
-        // 2. 如何清理相关的资源
+        // 步骤1：从执行计划仓库中删除
+        // 这会导致新启动的工作流实例无法找到该版本
+        executionPlanRepository.deleteByWorkflowIdAndVersion(workflowId, version);
+
+        // 步骤2：从内存映射中移除
+        workflowWorkers.remove(workflowKey);
+
+        log.info("工作流注销完成: {}", workflowKey);
     }
 
     /**
@@ -287,6 +335,10 @@ public class TemporalWorkerManager {
      *   <li>Temporal 自动确保实例使用启动时的版本</li>
      * </ul>
      *
+     * <p>实现说明：
+     * 直接调用 registerWorkflow() 方法即可完成更新。
+     * ExecutionPlanRepository.save() 会自动覆盖相同 workflowId:version 的记录。
+     *
      * @param newPlan 新的执行计划
      */
     public void updateWorkflow(ExecutionPlan newPlan) {
@@ -297,10 +349,98 @@ public class TemporalWorkerManager {
 
         log.info("正在更新工作流注册: {}", workflowKey);
 
-        // TODO: 实现工作流更新逻辑
-        // 可以选择：
-        // 1. 直接注册新版本
-        // 2. 或者更新现有的 Worker 配置
+        // 直接调用 registerWorkflow 即可
+        // Repository.save() 会自动覆盖旧版本
+        registerWorkflow(newPlan);
+    }
+
+    /**
+     * 获取已注册的工作流
+     * <p>
+     * 根据工作流 ID 和版本获取已注册的 ExecutionPlan。
+     *
+     * @param workflowId 工作流 ID
+     * @param version 工作流版本
+     * @return ExecutionPlan，如果不存在则返回 null
+     */
+    public ExecutionPlan getRegisteredWorkflow(String workflowId, String version) {
+        String workflowKey = buildWorkflowKey(workflowId, version);
+        return executionPlanRepository.findByWorkflowIdAndVersion(workflowId, version).orElse(null);
+    }
+
+    /**
+     * 获取所有已注册的工作流
+     * <p>
+     * 返回所有已注册的工作流执行计划列表。
+     *
+     * @return 已注册的工作流列表
+     */
+    public List<ExecutionPlan> getAllRegisteredWorkflows() {
+        return executionPlanRepository.findAll();
+    }
+
+    /**
+     * 检查工作流是否已注册
+     *
+     * @param workflowId 工作流 ID
+     * @param version 工作流版本
+     * @return 是否已注册
+     */
+    public boolean isWorkflowRegistered(String workflowId, String version) {
+        String workflowKey = buildWorkflowKey(workflowId, version);
+        return workflowWorkers.containsKey(workflowKey);
+    }
+
+    /**
+     * 验证执行计划的完整性和正确性
+     * <p>
+     * 在注册工作流之前验证 ExecutionPlan 的必要字段和结构。
+     *
+     * @param plan 执行计划
+     * @param workflowKey 工作流唯一标识键
+     * @throws IllegalArgumentException 如果验证失败
+     */
+    private void validateExecutionPlan(ExecutionPlan plan, String workflowKey) {
+        // 验证基本信息
+        if (plan == null) {
+            throw new IllegalArgumentException("ExecutionPlan 不能为空: " + workflowKey);
+        }
+
+        if (plan.getWorkflowId() == null || plan.getWorkflowId().isEmpty()) {
+            throw new IllegalArgumentException("WorkflowId 不能为空: " + workflowKey);
+        }
+
+        if (plan.getWorkflowVersion() == null || plan.getWorkflowVersion().isEmpty()) {
+            throw new IllegalArgumentException("WorkflowVersion 不能为空: " + workflowKey);
+        }
+
+        // 验证节点定义
+        if (plan.getNodes() == null || plan.getNodes().isEmpty()) {
+            throw new IllegalArgumentException("节点列表不能为空: " + workflowKey);
+        }
+
+        // 验证入口节点
+        if (plan.getEntryNodeId() == null || plan.getEntryNodeId().isEmpty()) {
+            throw new IllegalArgumentException("入口节点 ID 不能为空: " + workflowKey);
+        }
+
+        if (!plan.getNodes().containsKey(plan.getEntryNodeId())) {
+            throw new IllegalArgumentException("入口节点不存在: " + plan.getEntryNodeId() + ", " + workflowKey);
+        }
+
+        // 验证所有引用的节点都存在
+        if (plan.getTransitions() != null) {
+            for (var transition : plan.getTransitions()) {
+                if (transition.getFrom() != null && !plan.getNodes().containsKey(transition.getFrom())) {
+                    throw new IllegalArgumentException("转换引用的源节点不存在: " + transition.getFrom());
+                }
+                if (transition.getTo() != null && !plan.getNodes().containsKey(transition.getTo())) {
+                    throw new IllegalArgumentException("转换引用的目标节点不存在: " + transition.getTo());
+                }
+            }
+        }
+
+        log.debug("ExecutionPlan 验证通过: {}", workflowKey);
     }
 
     /**

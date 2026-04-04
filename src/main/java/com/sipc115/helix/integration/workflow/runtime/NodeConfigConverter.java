@@ -3,7 +3,7 @@ package com.sipc115.helix.integration.workflow.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.domain.workflow.DslNodeType;
-import com.sipc115.helix.integration.workflow.node.logic.ConditionNodeConfig;
+import com.sipc115.helix.integration.workflow.node.logic.condition.ConditionNodeConfig;
 import com.sipc115.helix.integration.workflow.node.end.EndNodeConfig;
 import com.sipc115.helix.integration.workflow.node.humanInput.HumanInputNodeConfig;
 import com.sipc115.helix.integration.workflow.node.start.StartNodeConfig;
