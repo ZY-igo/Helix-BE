@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -188,11 +189,14 @@ public class TemporalWorkerManager {
         );
 
         // 步骤4：注册所有 Activity 实现
-        // Spring 自动收集所有实现了 Activity 接口的 Bean
-        // 这些 Activity 会被 Worker 用来执行具体的工作单元
-        this.defaultWorker.registerActivitiesImplementations(
-            allActivities.toArray(new Object[0])
-        );
+        // 过滤出真正的 Temporal Activity（带有 @ActivityInterface 注解的类）
+        List<Object> temporalActivities = filterTemporalActivities(allActivities);
+        if (!temporalActivities.isEmpty()) {
+            this.defaultWorker.registerActivitiesImplementations(
+                temporalActivities.toArray(new Object[0])
+            );
+            log.info("已注册 {} 个 Temporal Activity", temporalActivities.size());
+        }
 
         // 步骤5：启动 WorkerFactory
         // 启动后 Worker 开始从任务队列中获取并执行任务
@@ -201,6 +205,24 @@ public class TemporalWorkerManager {
 
         log.info("TemporalWorkerManager 初始化完成，已启动默认 Worker，任务队列: {}",
                 DEFAULT_TASK_QUEUE);
+    }
+
+    /**
+     * 过滤出真正的 Temporal Activity
+     * <p>
+     * 只注册带有 @ActivityInterface 注解的类，过滤掉 Spring 内部 Bean
+     *
+     * @param allBeans 所有 Bean 实例列表
+     * @return 真正的 Temporal Activity 列表
+     */
+    private List<Object> filterTemporalActivities(List<Object> allBeans) {
+        List<Object> temporalActivities = new ArrayList<>();
+        for (Object bean : allBeans) {
+            if (bean.getClass().isAnnotationPresent(io.temporal.activity.ActivityInterface.class)) {
+                temporalActivities.add(bean);
+            }
+        }
+        return temporalActivities;
     }
 
     /**

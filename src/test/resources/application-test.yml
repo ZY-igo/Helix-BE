@@ -1,23 +1,21 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:postgresql://192.168.115.23:5432/helix
+    driver-class-name: org.postgresql.Driver
+    username: admin
+    password: Sipc@postgres
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
-  h2:
-    console:
-      enabled: true
 
 app:
   encryption:
     master-key: test-master-key-for-unit-tests-only
 
 rocketmq:
+  enabled: false
   name-server: localhost:9876
   producer:
     group: test-producer-group

@@ -103,7 +103,7 @@ public class WorkflowPersistenceService {
     public ExecutionPlan saveExecutionPlan(ExecutionPlan plan) {
         try {
             ExecutionPlanEntity entity = new ExecutionPlanEntity();
-            entity.setPlanId(plan.getPlanId());
+            entity.setPlanId(plan.getPlanId() != null ? plan.getPlanId() : java.util.UUID.randomUUID().toString());
             entity.setWorkflowId(plan.getWorkflowId());
             entity.setVersion(plan.getWorkflowVersion());
             entity.setPlanContent(objectMapper.writeValueAsString(plan));
@@ -114,7 +114,7 @@ public class WorkflowPersistenceService {
 
             planRepository.save(entity);
             logger.info("✅ 执行计划已保存到数据库。workflowId={}, version={}, planId={}",
-                    plan.getWorkflowId(), plan.getWorkflowVersion(), plan.getPlanId());
+                    plan.getWorkflowId(), plan.getWorkflowVersion(), entity.getPlanId());
 
             return plan;
         } catch (JsonProcessingException e) {

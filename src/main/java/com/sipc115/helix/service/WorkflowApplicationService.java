@@ -8,6 +8,7 @@ import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.WorkflowCompileDomainService;
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
 import com.sipc115.helix.domain.workflow.WorkflowDslDomainService;
+import com.sipc115.helix.integration.workflow.spi.DslCompiler;
 import com.sipc115.helix.repository.jpa.JpaExecutionPlanRepository;
 import com.sipc115.helix.repository.jpa.JpaWorkflowDslRepository;
 import com.sipc115.helix.utils.SnowflakeIdGenerator;
@@ -30,16 +31,19 @@ public class WorkflowApplicationService {
     private final JpaExecutionPlanRepository planRepository;
     private final ObjectMapper objectMapper;
     private final SnowflakeIdGenerator idGenerator;
+    private final DslCompiler dslCompiler;
 
     public WorkflowApplicationService(
             JpaWorkflowDslRepository dslRepository,
             JpaExecutionPlanRepository planRepository,
             ObjectMapper objectMapper,
-            SnowflakeIdGenerator idGenerator) {
+            SnowflakeIdGenerator idGenerator,
+            DslCompiler dslCompiler) {
         this.dslRepository = dslRepository;
         this.planRepository = planRepository;
         this.objectMapper = objectMapper;
         this.idGenerator = idGenerator;
+        this.dslCompiler = dslCompiler;
     }
 
     @Transactional
@@ -170,6 +174,7 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+
     @Transactional
     public ExecutionPlanEntity saveAndCompile(WorkflowDsl dsl, String compiledBy) {
         log.info("Saving and compiling workflow. workflowId={}, version={}",
@@ -177,7 +182,7 @@ public class WorkflowApplicationService {
 
         WorkflowDslEntity entity = saveWorkflow(dsl, compiledBy);
 
-        WorkflowCompileDomainService compileService = new WorkflowCompileDomainService(null);
+        WorkflowCompileDomainService compileService = new WorkflowCompileDomainService(dslCompiler);
         ExecutionPlan plan = compileService.compile(dsl);
 
         String planId = String.valueOf(idGenerator.nextId());

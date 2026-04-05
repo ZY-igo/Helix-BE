@@ -1,4 +1,4 @@
-package com.sipc115.helix.integration.workflow.node.agent;
+package com.sipc115.helix.integration.workflow.node.agent.chat;
 
 import io.temporal.activity.ActivityInterface;
 
