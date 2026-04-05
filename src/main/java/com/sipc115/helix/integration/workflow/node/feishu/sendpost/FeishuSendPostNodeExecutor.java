@@ -1,12 +1,14 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.workflow.engine.ActivityFactory;
-import com.sipc115.helix.integration.workflow.engine.ActivityInvocationSpec;
+import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
+import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
+import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -16,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.List;
@@ -26,10 +29,16 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendPostNodeExecutor.class);
     private static WorkflowTraceService traceService;
+    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuSendPostNodeExecutor.traceService = traceService;
+    }
+
+    @Autowired
+    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
+        FeishuSendPostNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -38,6 +47,7 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
@@ -45,23 +55,25 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         Long connectionId = getLongValue(config, "connectionId");
         String chatId = getStringValue(config, "chatId");
         String title = getStringValue(config, "title");
-        List<String> lines = getStringListValue(config, "lines");
+        List<String> lines = (List<String>) config.get("lines");
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "sendPost");
         output.put("connectionId", connectionId);
         output.put("chatId", chatId);
         output.put("title", title);
-        output.put("lines", lines);
 
         boolean success = false;
         try {
-            ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
-            ActivityFactory factory = bridge.activities();
-            FeishuSendPostActivity activity = factory.getActivity(FeishuSendPostActivity.class, spec);
-            success = activity.sendPost(connectionId, chatId, title, lines);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            String token = authClient.getToken();
 
+            FeishuApiHandler handler = new FeishuApiHandler(new ObjectMapper(), RestClient.builder());
+            String messageId = handler.sendPost(token, chatId, title, lines);
+
+            success = messageId != null && !messageId.isEmpty();
             output.put("success", success);
+            output.put("messageId", messageId);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
@@ -130,11 +142,5 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         if (value == null) return null;
         if (value instanceof Number) return ((Number) value).longValue();
         return Long.parseLong(value.toString());
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> getStringListValue(Map<String, Object> config, String key) {
-        Object value = config.get(key);
-        return value instanceof List ? (List<String>) value : null;
     }
 }

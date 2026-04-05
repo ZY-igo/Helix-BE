@@ -1,12 +1,14 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.workflow.engine.ActivityFactory;
-import com.sipc115.helix.integration.workflow.engine.ActivityInvocationSpec;
+import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
+import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
+import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -16,27 +18,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 飞书发送文本消息节点执行器
- * <p>
- * 负责执行飞书发送文本消息节点，调用飞书 API 发送文本消息。
- *
- * @author Helix Team
- * @since 2.0.0
- */
 @Component
 public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendTextNodeExecutor.class);
     private static WorkflowTraceService traceService;
+    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuSendTextNodeExecutor.traceService = traceService;
+    }
+
+    @Autowired
+    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
+        FeishuSendTextNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -61,12 +62,15 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
         boolean success = false;
         try {
-            ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
-            ActivityFactory factory = bridge.activities();
-            FeishuSendTextActivity activity = factory.getActivity(FeishuSendTextActivity.class, spec);
-            success = activity.sendText(connectionId, chatId, text);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            String token = authClient.getToken();
 
+            FeishuApiHandler handler = new FeishuApiHandler(new ObjectMapper(), RestClient.builder());
+            String messageId = handler.sendText(token, chatId, text);
+
+            success = messageId != null && !messageId.isEmpty();
             output.put("success", success);
+            output.put("messageId", messageId);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
@@ -132,12 +136,8 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     private Long getLongValue(Map<String, Object> config, String key) {
         Object value = config.get(key);
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
+        if (value == null) return null;
+        if (value instanceof Number) return ((Number) value).longValue();
         return Long.parseLong(value.toString());
     }
 }
