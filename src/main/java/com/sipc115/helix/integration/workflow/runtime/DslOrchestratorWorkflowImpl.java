@@ -201,24 +201,69 @@ public class DslOrchestratorWorkflowImpl {
     /**
      * 执行工作流计划
      * <p>
-     * 核心调度逻辑，按拓扑顺序执行节点。
+     * 核心调度逻辑，按拓扑顺序执行节点。支持多上游节点汇聚、重试机制和条件分支。
      *
-     * <h3>执行循环：</h3>
-     * <ol>
-     *   <li>获取当前节点定义</li>
-     *   <li>查找对应的节点执行器</li>
-     *   <li>调用执行器执行节点</li>
-     *   <li>将节点输出合并到上下文变量</li>
-     *   <li>更新节点和工作流状态</li>
-     *   <li>根据分支键选择下一节点</li>
-     * </ol>
+     * <h3>执行流程图：</h3>
+     * <pre>
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │                        executePlan 循环开始                          │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *                                    │
+     *                                    ▼
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │  canExecuteNode(node)? ──否──▶ findNextReadyNode ──找到──▶ 继续循环  │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *                  │是
+     *                  ▼
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │                      执行节点 (executor.execute)                    │
+     * │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
+     * │   │  节点重试   │  │   成功      │  │   失败      │                 │
+     * │   │  机制      │  │             │  │             │                 │
+     * │   └─────────────┘  └─────────────┘  └─────────────┘                 │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *                                    │
+     *                                    ▼
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │              节点输出合并到 context.variables                        │
+     * │   context.variables[nodeId] = result.output                         │
+     * │   context.variables.putAll(result.output)                           │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *                                    │
+     *                                    ▼
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │                   选择下一节点（三级降级策略）                        │
+     * │   1. result.getNextNodeId() 优先使用                                │
+     * │   2. transitionResolver.nextNode() 根据分支键选择                   │
+     * │   3. findNextReadyNode() 全局扫描兜底                              │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *                                    │
+     *                                    ▼
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │                      循环直到 END 节点或无节点可执行                  │
+     * └─────────────────────────────────────────────────────────────────────┘
+     * </pre>
      *
-     * <h3>节点输出合并说明：</h3>
-     * <p>
-     * 节点执行完成后，其输出会自动合并到执行上下文的变量中：
+     * <h3>多上游节点汇聚（Join/Barrier）说明：</h3>
+     * <pre>
+     * 节点A ──┐
+     *         ├──→ 节点D（只有A、B都完成才执行）
+     * 节点B ──┘
+     *
+     * 执行流程：
+     * 1. A完成 → markNodeCompleted(A) → D.completedPredecessors={A}
+     * 2. canExecuteNode(D) 检查D的所有前驱：
+     *    - A: COMPLETED ✓
+     *    - B: 尚未执行，status=null，递归检查B的有效状态
+     *    - B的有效状态取决于其前驱，如果B的前驱都完成则B视为SKIPPED
+     * 3. canExecuteNode(D) 返回 true → D可执行
+     * </pre>
+     *
+     * <h3>防死锁机制：</h3>
      * <ul>
-     *   <li>完整输出以节点ID为键存储 - 便于追溯来源</li>
-     *   <li>输出中的每个键值对也会展开合并 - 便于后续节点直接引用</li>
+     *   <li>maxIterations = 节点数 * 2，防止无限循环</li>
+     *   <li>findNextReadyNode 跳过 COMPLETED 和 RUNNING 状态的节点</li>
+     *   <li>SKIPPED 状态的前驱节点不阻塞下游执行</li>
      * </ul>
      *
      * @param plan 执行计划
@@ -314,6 +359,25 @@ public class DslOrchestratorWorkflowImpl {
         context.setWorkflowStatus(ExecutionStatus.COMPLETED);
     }
 
+    /**
+     * 计算哪些节点的输出是后续节点需要的
+     * <p>
+     * 通过扫描所有节点的配置，检查是否包含 ${} 表达式引用来确定。
+     * 如果某个节点的输出被其他节点引用，则该节点的输出需要保留。
+     * 用于内存优化：不被引用的节点执行后可以清理其输出。
+     *
+     * <h3>示例：</h3>
+     * <pre>
+     * 节点A 输出: {result: "xxx"}
+     * 节点B 配置: {text: "${A.result}"}  // 引用了A的输出
+     * 节点C 配置: {text: "static text"}  // 没有引用
+     *
+     * 结果：neededNodeOutputs = {A}  // 只有A的输出需要保留
+     * </pre>
+     *
+     * @param plan 执行计划
+     * @return 需要保留输出的节点ID集合
+     */
     private Set<String> computeNeededNodeOutputs(ExecutionPlan plan) {
         Set<String> needed = new TreeSet<>();
         for (CompiledNode node : plan.getNodes().values()) {
@@ -333,6 +397,15 @@ public class DslOrchestratorWorkflowImpl {
         return needed;
     }
 
+    /**
+     * 获取节点的最大重试次数配置
+     * <p>
+     * 从节点配置的 maxRetries 字段读取重试次数。
+     * 支持 Number 类型的配置值。
+     *
+     * @param node 编译后的节点
+     * @return 最大重试次数，默认0表示不重试
+     */
     private int getMaxRetries(CompiledNode node) {
         Object retries = node.getConfig().get("maxRetries");
         if (retries instanceof Number) {
@@ -341,6 +414,44 @@ public class DslOrchestratorWorkflowImpl {
         return 0;
     }
 
+    /**
+     * 判断节点是否可以执行
+     * <p>
+     * 检查节点的所有上游节点是否都已完成（COMPLETED）或跳过（SKIPPED）。
+     * 只有所有非SKIPPED的前驱都完成后，节点才能执行。
+     *
+     * <h3>判断逻辑：</h3>
+     * <pre>
+     * for (前驱节点 in predecessors) {
+     *     if (前驱状态 == SKIPPED) continue;  // 跳过的节点不阻塞
+     *     if (前驱状态 == COMPLETED) continue;  // 已完成的节点通过
+     *     if (前驱状态 == null) {
+     *         effectiveStatus = getEffectiveNodeStatus(节点);  // 递归检查
+     *         if (effectiveStatus == SKIPPED) continue;  // 视为跳过
+     *         if (effectiveStatus != COMPLETED) return false;  // 未完成
+     *     } else {
+     *         return false;  // 其他状态（RUNNING/PENDING等）阻塞
+     *     }
+     * }
+     * return true;  // 所有前驱都满足条件
+     * </pre>
+     *
+     * <h3>条件分支场景处理：</h3>
+     * <pre>
+     * A → CONDITION → B
+     *             → C → D
+     *
+     * 如果走了B分支，C从未被执行，status=null。
+     * getEffectiveNodeStatus(C) 会检查C的所有前驱：
+     * - CONDITION 的状态是 COMPLETED
+     * - 所以 C 被视为 SKIPPED，不阻塞 D 的执行
+     * </pre>
+     *
+     * @param plan 执行计划
+     * @param nodeId 节点ID
+     * @param context 执行上下文
+     * @return true 表示节点可以执行，false 表示不能执行
+     */
     private boolean canExecuteNode(ExecutionPlan plan, String nodeId, ExecutionContext context) {
         Set<String> preds = plan.getPredecessors().get(nodeId);
         if (preds == null || preds.isEmpty()) {
@@ -368,6 +479,32 @@ public class DslOrchestratorWorkflowImpl {
         return true;
     }
 
+    /**
+     * 获取节点的有效状态
+     * <p>
+     * 递归检查节点的状态。如果节点从未被执行（status=null），
+     * 通过递归检查其所有前驱来判断其有效状态。
+     *
+     * <h3>判断规则：</h3>
+     * <ul>
+     *   <li>如果节点有直接状态（COMPLETED/SKIPPED等），直接返回</li>
+     *   <li>如果节点是入口节点（无前驱），视为 COMPLETED</li>
+     *   <li>如果节点的所有前驱都完成了，视为 SKIPPED（条件分支互斥）</li>
+     *   <li>否则视为 PENDING</li>
+     * </ul>
+     *
+     * <h3>递归终止条件：</h3>
+     * <pre>
+     * 1. 找到节点有直接状态
+     * 2. 找到节点的前驱有非COMPLETED/非SKIPPED状态
+     * 3. 递归到入口节点（无前驱）
+     * </pre>
+     *
+     * @param plan 执行计划
+     * @param nodeId 节点ID
+     * @param context 执行上下文
+     * @return 节点的有效状态
+     */
     private ExecutionStatus getEffectiveNodeStatus(ExecutionPlan plan, String nodeId, ExecutionContext context) {
         ExecutionStatus directStatus = context.getNodeStatuses().get(nodeId);
         if (directStatus != null) {
@@ -393,6 +530,34 @@ public class DslOrchestratorWorkflowImpl {
         return ExecutionStatus.SKIPPED;
     }
 
+    /**
+     * 标记节点完成并通知下游节点
+     * <p>
+     * 当节点执行成功后，调用此方法更新其所有下游节点的已完成前驱集合。
+     * 这是 Join/Barrier 机制的关键：只有当一个节点的所有前驱都完成后，
+     * 该节点才能被执行。
+     *
+     * <h3>工作流程：</h3>
+     * <pre>
+     * 节点A ──┬──→ 节点C
+     *         └──→ 节点D
+     *
+     * A执行完成后：
+     * markNodeCompleted(A) 会遍历A的所有后继（B、C、D）
+     * 并将A添加到它们各自的 completedPredecessors 集合中
+     *
+     * C.completedPredecessors = {A}
+     * D.completedPredecessors = {A}
+     * </pre>
+     *
+     * <h3>线程安全说明：</h3>
+     * <p>
+     * 使用 TreeSet 保证在 Temporal 重放时的确定性。
+     * 使用 computeIfAbsent 避免空指针并保证原子性。
+     *
+     * @param plan 执行计划
+     * @param nodeId 刚完成执行的节点ID
+     */
     private void markNodeCompleted(ExecutionPlan plan, String nodeId) {
         Set<String> succs = plan.getSuccessors().get(nodeId);
         if (succs != null) {
@@ -404,6 +569,37 @@ public class DslOrchestratorWorkflowImpl {
         }
     }
 
+    /**
+     * 查找下一个可执行的节点
+     * <p>
+     * 当当前节点不可执行时（如等待上游节点），扫描所有节点找到第一个可执行的节点。
+     * 跳过已经完成（COMPLETED）或正在运行（RUNNING）的节点。
+     *
+     * <h3>使用场景：</h3>
+     * <ul>
+     *   <li>多上游节点汇聚时，需要等待所有上游完成</li>
+     *   <li>条件分支场景下，选择未走的分支</li>
+     *   <li>节点执行完成后，下一节点不可执行时的兜底策略</li>
+     * </ul>
+     *
+     * <h3>查找顺序：</h3>
+     * <pre>
+     * 按节点ID顺序遍历，返回第一个满足以下条件的节点：
+     * 1. 状态不是 COMPLETED
+     * 2. 状态不是 RUNNING
+     * 3. canExecuteNode() 返回 true
+     * </pre>
+     *
+     * <h3>返回 null 的情况：</h3>
+     * <ul>
+     *   <li>所有节点都已完成</li>
+     *   <li>所有节点都不可执行（可能存在未解决的依赖环）</li>
+     * </ul>
+     *
+     * @param plan 执行计划
+     * @param context 执行上下文
+     * @return 下一个可执行的节点ID，如果不存在返回 null
+     */
     private String findNextReadyNode(ExecutionPlan plan, ExecutionContext context) {
         for (String nodeId : plan.getNodes().keySet()) {
             ExecutionStatus status = context.getNodeStatuses().get(nodeId);

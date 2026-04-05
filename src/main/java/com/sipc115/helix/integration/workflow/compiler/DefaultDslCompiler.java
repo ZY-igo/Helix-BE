@@ -519,6 +519,56 @@ public class DefaultDslCompiler implements DslCompiler {
         // 例如，检查条件表达式的复杂度，或进行性能优化
     }
 
+    /**
+     * 计算节点的入度和出度关系
+     * <p>
+     * 根据工作流的边（edges）计算每个节点的前驱（predecessors）和后继（successors）。
+     * 这是实现 Join/Barrier 机制的基础。
+     *
+     * <h3>算法流程：</h3>
+     * <pre>
+     * 1. 初始化：为所有节点创建空的 pre/succ 集合
+     * 2. 遍历所有边：
+     *    - 对于边 A → B，将 A 添加到 B 的 predecessors
+     *    - 对于边 A → B，将 B 添加到 A 的 successors
+     * </pre>
+     *
+     * <h3>示例：</h3>
+     * <pre>
+     * 边定义:
+     * edges = [
+     *   {from: "A", to: "B"},
+     *   {from: "A", to: "C"},
+     *   {from: "B", to: "D"},
+     *   {from: "C", to: "D"}
+     * ]
+     *
+     * 执行结果:
+     * predecessors = {
+     *   "A": {},      // 入口节点无前驱
+     *   "B": {"A"},
+     *   "C": {"A"},
+     *   "D": {"B", "C"}  // D 有两个前驱
+     * }
+     *
+     * successors = {
+     *   "A": {"B", "C"},
+     *   "B": {"D"},
+     *   "C": {"D"},
+     *   "D": {}       // 结束节点无后继
+     * }
+     * </pre>
+     *
+     * <h3>用途：</h3>
+     * <ul>
+     *   <li>DslOrchestratorWorkflowImpl.canExecuteNode() - 判断节点是否可执行</li>
+     *   <li>DslOrchestratorWorkflowImpl.markNodeCompleted() - 通知下游节点</li>
+     *   <li>检测环形依赖</li>
+     * </ul>
+     *
+     * @param dsl 工作流 DSL（包含边信息）
+     * @param plan 执行计划（包含节点信息，用于初始化集合）
+     */
     private void computePredecessorsAndSuccessors(WorkflowDsl dsl, ExecutionPlan plan) {
         Map<String, Set<String>> predecessors = new TreeMap<>();
         Map<String, Set<String>> successors = new TreeMap<>();

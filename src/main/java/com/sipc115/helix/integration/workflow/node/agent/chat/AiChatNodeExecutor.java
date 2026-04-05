@@ -21,6 +21,58 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * AI 聊天节点执行器
+ * <p>
+ * 负责执行 AI 对话任务节点，支持调用 LLM API 进行对话。
+ *
+ * <h3>DSL 配置示例：</h3>
+ * <pre>
+ * {
+ *   "type": "AI_TASK",
+ *   "config": {
+ *     "connectionId": 1,
+ *     "systemPrompt": "你是一个专业的分析师",
+ *     "userPrompt": "请分析这份报告：${reportNode.content}",
+ *     "temperature": 0.7,
+ *     "maxTokens": 4096,
+ *     "outputVar": "analysisResult"
+ *   }
+ * }
+ * </pre>
+ *
+ * <h3>执行流程：</h3>
+ * <pre>
+ * 1. 验证配置（connectionId, userPrompt 必须）
+ * 2. 表达式求值（userPrompt 中的 ${} 替换为实际值）
+ * 3. 获取 LLM 客户端（通过 ConnectionClientRegistry）
+ * 4. 调用 LLM API 获取响应
+ * 5. 整理输出结果并返回
+ * </pre>
+ *
+ * <h3>输出格式：</h3>
+ * <pre>
+ * {
+ *   "action": "aiChat",
+ *   "connectionId": 1,
+ *   "model": "glm-4",
+ *   "analysisResult": "这是AI的分析结果...",
+ *   "status": "success",
+ *   "timestamp": 1234567890
+ * }
+ * </pre>
+ *
+ * <h3>表达式缓存机制：</h3>
+ * <p>
+ * 为了避免重复求值，相同的表达式只会求值一次，结果会被缓存。
+ * 例如多个节点都引用 ${A.result}，只会求值一次。
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ * @see WorkflowNodeExecutor
+ * @see LlmAuthClient
+ * @see ExpressionEngine
+ */
 @Component
 public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
@@ -134,6 +186,31 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         }
     }
 
+    /**
+     * 表达式求值
+     * <p>
+     * 对包含 ${} 表达式的字符串进行求值。
+     * 支持从 context.variables 中读取变量值。
+     *
+     * <h3>表达式缓存机制：</h3>
+     * <pre>
+     * 1. 先检查缓存是否有结果
+     * 2. 如果没有，调用 ExpressionEngine 求值
+     * 3. 将结果缓存到 context.expressionCache
+     * 4. 下次相同表达式直接返回缓存结果
+     * </pre>
+     *
+     * <h3>示例：</h3>
+     * <pre>
+     * 输入: "Hello, ${user.name}!"
+     * 变量: {user: {name: "Alice"}}
+     * 输出: "Hello, Alice!"
+     * </pre>
+     *
+     * @param expression 包含表达式的字符串
+     * @param context 执行上下文
+     * @return 求值后的字符串
+     */
     private String evaluateExpression(String expression, ExecutionContext context) {
         if (expression == null || expression.isEmpty()) {
             return "";
@@ -159,6 +236,15 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         return expression;
     }
 
+    /**
+     * 安全获取 Long 类型值
+     * <p>
+     * 支持 Number 类型和字符串类型的转换。
+     *
+     * @param value 原始值
+     * @return Long 类型值
+     * @throws NumberFormatException 如果值无法转换为 Long
+     */
     private Long getLongValue(Object value) {
         if (value == null) {
             return null;
@@ -169,6 +255,15 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         return Long.parseLong(value.toString());
     }
 
+    /**
+     * 安全获取 String 类型值
+     * <p>
+     * 如果值为 null，返回默认值。
+     *
+     * @param value 原始值
+     * @param defaultValue 默认值
+     * @return String 类型值
+     */
     private String getStringValue(Object value, String defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -176,6 +271,15 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         return value.toString();
     }
 
+    /**
+     * 安全获取 Double 类型值
+     * <p>
+     * 支持 Number 类型和字符串类型的转换。
+     *
+     * @param value 原始值
+     * @param defaultValue 默认值
+     * @return Double 类型值
+     */
     private Double getDoubleValue(Object value, Double defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -186,6 +290,15 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         return Double.parseDouble(value.toString());
     }
 
+    /**
+     * 安全获取 Integer 类型值
+     * <p>
+     * 支持 Number 类型和字符串类型的转换。
+     *
+     * @param value 原始值
+     * @param defaultValue 默认值
+     * @return Integer 类型值
+     */
     private Integer getIntValue(Object value, Integer defaultValue) {
         if (value == null) {
             return defaultValue;

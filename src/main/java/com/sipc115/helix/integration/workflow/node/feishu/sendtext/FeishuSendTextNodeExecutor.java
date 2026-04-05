@@ -23,6 +23,53 @@ import org.springframework.web.client.RestClient;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 飞书发送文本消息节点执行器
+ * <p>
+ * 负责向飞书群聊或个人会话发送文本消息。
+ *
+ * <h3>DSL 配置示例：</h3>
+ * <pre>
+ * {
+ *   "type": "FEISHU_SEND_TEXT",
+ *   "config": {
+ *     "connectionId": 123,          // 飞书连接ID
+ *     "chatId": "oc_xxxx",          // 会话ID
+ *     "text": "Hello, ${user.name}!" // 消息内容
+ *   }
+ * }
+ * </pre>
+ *
+ * <h3>架构说明：</h3>
+ * <p>
+ * 采用新架构（扁平化），不依赖 Temporal Activity：
+ * <pre>
+ * FeishuSendTextNodeExecutor
+ *        ↓
+ * ConnectionClientRegistry.getOrCreateClientByConnection(connectionId)
+ *        ↓
+ * FeishuAuthClient.getToken()
+ *        ↓
+ * FeishuApiHandler.sendText(token, chatId, text)
+ * </pre>
+ *
+ * <h3>与旧架构对比：</h3>
+ * <pre>
+ * 旧架构：Executor → ActivityFactory → ActivityImpl → FeishuApiHandler
+ * 新架构：Executor → FeishuAuthClient → FeishuApiHandler
+ *
+ * 新架构优势：
+ * - 少一层抽象，代码更简洁
+ * - 不需要 Activity 注册
+ * - 更容易测试和维护
+ * </pre>
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ * @see WorkflowNodeExecutor
+ * @see FeishuApiHandler
+ * @see FeishuAuthClient
+ */
 @Component
 public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
@@ -88,6 +135,16 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         return result;
     }
 
+    /**
+     * 启动节点追踪
+     * <p>
+     * 如果 traceService 可用，记录节点开始执行的信息。
+     * 追踪信息用于审计和问题排查。
+     *
+     * @param node 节点定义
+     * @param context 执行上下文
+     * @return 追踪记录实体，如果追踪失败返回 null
+     */
     private NodeExecutionTraceEntity startTrace(CompiledNode node, ExecutionContext context) {
         if (traceService == null || context.getExecutionId() == null) {
             return null;
@@ -109,6 +166,14 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         }
     }
 
+    /**
+     * 标记节点执行成功
+     * <p>
+     * 将节点执行结果记录到追踪服务。
+     *
+     * @param trace 追踪记录
+     * @param output 节点输出
+     */
     private void markNodeSuccess(NodeExecutionTraceEntity trace, Map<String, Object> output) {
         if (traceService != null && trace != null) {
             try {
@@ -119,6 +184,14 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         }
     }
 
+    /**
+     * 标记节点执行失败
+     * <p>
+     * 将节点失败信息记录到追踪服务。
+     *
+     * @param trace 追踪记录
+     * @param errorMessage 错误信息
+     */
     private void markNodeFailed(NodeExecutionTraceEntity trace, String errorMessage) {
         if (traceService != null && trace != null) {
             try {
