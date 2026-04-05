@@ -140,9 +140,16 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
         }
 
         if (expressionEngine != null && expression.contains("${")) {
+            Object cached = context.getCachedExpression(expression);
+            if (cached != null) {
+                return cached.toString();
+            }
+
             try {
                 Object result = expressionEngine.execute(expression, context.getVariables());
-                return result != null ? result.toString() : "";
+                String evaluated = result != null ? result.toString() : "";
+                context.cacheExpressionResult(expression, evaluated);
+                return evaluated;
             } catch (Exception e) {
                 log.warn("表达式求值失败，使用原始值: {}", e.getMessage());
                 return expression;

@@ -101,7 +101,11 @@ public class DefaultDslCompiler implements DslCompiler {
                     .collect(Collectors.toList()));
             logger.debug("Compiled {} edges", plan.getTransitions().size());
 
-            // 9. 设置调度信息（如果有）
+            // 9. 计算节点的入度和前后继关系（用于Join/Barrier调度）
+            computePredecessorsAndSuccessors(dsl, plan);
+            logger.debug("Computed predecessors and successors for workflow");
+
+            // 10. 设置调度信息（如果有）
             plan.setSchedule(dsl.getSchedule());
 
             logger.info("Compilation completed successfully for workflow: {}", dsl.getWorkflowId());
@@ -510,8 +514,33 @@ public class DefaultDslCompiler implements DslCompiler {
         // 1. 为条件边添加优先级
         // 2. 优化条件表达式的执行
         // 3. 处理条件边的特殊属性
-        
+
         // 示例：可以在这里添加条件边的特殊处理逻辑
         // 例如，检查条件表达式的复杂度，或进行性能优化
+    }
+
+    private void computePredecessorsAndSuccessors(WorkflowDsl dsl, ExecutionPlan plan) {
+        Map<String, Set<String>> predecessors = new TreeMap<>();
+        Map<String, Set<String>> successors = new TreeMap<>();
+
+        for (String nodeId : plan.getNodes().keySet()) {
+            predecessors.put(nodeId, new TreeSet<>());
+            successors.put(nodeId, new TreeSet<>());
+        }
+
+        for (DslEdgeSpec edge : dsl.getEdges()) {
+            String from = edge.getFrom();
+            String to = edge.getTo();
+
+            if (predecessors.containsKey(to)) {
+                predecessors.get(to).add(from);
+            }
+            if (successors.containsKey(from)) {
+                successors.get(from).add(to);
+            }
+        }
+
+        plan.setPredecessors(predecessors);
+        plan.setSuccessors(successors);
     }
 }

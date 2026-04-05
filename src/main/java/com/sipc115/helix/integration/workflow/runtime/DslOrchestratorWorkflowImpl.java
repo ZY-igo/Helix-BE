@@ -5,9 +5,7 @@ import com.sipc115.helix.domain.workflow.*;
 
 import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBridge;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * DSL 工作流编排器实现
@@ -232,56 +230,191 @@ public class DslOrchestratorWorkflowImpl {
             ExecutionContext context,
             WorkflowRuntimeBridge bridge
     ) {
-        // 从入口节点开始
-        String currentNodeId = plan.getEntryNodeId();
         context.setWorkflowStatus(ExecutionStatus.RUNNING);
 
-        // 主执行循环
-        while (currentNodeId != null) {
-            // 设置当前节点ID
+        Set<String> neededNodeOutputs = computeNeededNodeOutputs(plan);
+        context.getNeededNodeOutputs().addAll(neededNodeOutputs);
+
+        String currentNodeId = plan.getEntryNodeId();
+        int maxIterations = plan.getNodes().size() * 2;
+        int iteration = 0;
+        Map<String, Integer> nodeRetryCounts = new TreeMap<>();
+
+        while (currentNodeId != null && iteration < maxIterations) {
+            iteration++;
+
+            if (!canExecuteNode(plan, currentNodeId, context)) {
+                currentNodeId = findNextReadyNode(plan, context);
+                if (currentNodeId == null) {
+                    break;
+                }
+                continue;
+            }
+
             context.setCurrentNodeId(currentNodeId);
-
-            // 获取节点定义
             CompiledNode node = plan.getNodes().get(currentNodeId);
-
-            // 更新节点状态为运行中
             context.getNodeStatuses().put(currentNodeId, ExecutionStatus.RUNNING);
-
-            // 递增执行顺序号
             context.incrementExecutionOrder();
 
-            // 查找并调用节点执行器
-            WorkflowNodeExecutor executor = nodeExecutorRegistry.get(node.getType().name());
-            NodeExecutionResult result = executor.execute(node, context, bridge);
+            int maxRetries = getMaxRetries(node);
+            int currentRetry = nodeRetryCounts.getOrDefault(currentNodeId, 0);
 
-            // 将节点输出合并到上下文变量
-            // 这是关键的上下文传递机制
+            NodeExecutionResult result;
+            try {
+                WorkflowNodeExecutor executor = nodeExecutorRegistry.get(node.getType().name());
+                result = executor.execute(node, context, bridge);
+            } catch (Exception e) {
+                if (maxRetries > 0 && currentRetry < maxRetries) {
+                    nodeRetryCounts.put(currentNodeId, currentRetry + 1);
+                    context.getNodeStatuses().put(currentNodeId, ExecutionStatus.WAITING_RETRY);
+                    log.warn("节点 {} 执行失败，即将重试 {}/{}: {}", currentNodeId, currentRetry + 1, maxRetries, e.getMessage());
+                    continue;
+                }
+                log.error("节点 {} 执行失败，已达到最大重试次数: {}", currentNodeId, e.getMessage());
+                throw new RuntimeException("节点 " + currentNodeId + " 执行失败: " + e.getMessage(), e);
+            }
+
+            nodeRetryCounts.remove(currentNodeId);
+
             if (result.getOutput() != null && !result.getOutput().isEmpty()) {
-                // 1. 以节点ID为键存储完整输出
                 context.getVariables().put(node.getId(), result.getOutput());
-                // 2. 将输出中的每个键值对展开合并到变量
-                // 这样后续节点可以直接通过变量名访问
                 context.getVariables().putAll(result.getOutput());
             }
 
-            // 更新节点和工作流状态
             updateStatus(context, currentNodeId, result);
+            markNodeCompleted(plan, currentNodeId);
 
-            // 检查是否是结束节点
+            if (!neededNodeOutputs.contains(node.getId())) {
+                context.cleanupVariablesForNode(node.getId());
+                result.setOutput(null);
+            }
+
             if ("END".equals(node.getType().name())) {
                 context.setWorkflowStatus(ExecutionStatus.COMPLETED);
                 return;
             }
 
-            // 根据分支键选择下一节点
-            // 优先级：result.getNextNodeId() > transitionResolver.nextNode()
-            currentNodeId = result.getNextNodeId() != null
-                    ? result.getNextNodeId()
-                    : transitionResolver.nextNode(plan, node.getId(), result.getBranchKey());
+            String nextFromResult = result.getNextNodeId();
+            if (nextFromResult != null) {
+                currentNodeId = nextFromResult;
+            } else {
+                String nextFromTransition = transitionResolver.nextNode(plan, node.getId(), result.getBranchKey());
+                if (nextFromTransition != null && canExecuteNode(plan, nextFromTransition, context)) {
+                    currentNodeId = nextFromTransition;
+                } else {
+                    currentNodeId = findNextReadyNode(plan, context);
+                }
+            }
         }
 
-        // 正常结束（没有显式的END节点）
+        if (iteration >= maxIterations) {
+            throw new IllegalStateException("工作流执行超过最大迭代次数(" + maxIterations + ")，可能存在死锁或未完成的节点");
+        }
+
         context.setWorkflowStatus(ExecutionStatus.COMPLETED);
+    }
+
+    private Set<String> computeNeededNodeOutputs(ExecutionPlan plan) {
+        Set<String> needed = new TreeSet<>();
+        for (CompiledNode node : plan.getNodes().values()) {
+            Map<String, Object> config = node.getConfig();
+            if (config != null) {
+                for (Object value : config.values()) {
+                    if (value instanceof String) {
+                        String str = (String) value;
+                        if (str.contains("${")) {
+                            needed.add(node.getId());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return needed;
+    }
+
+    private int getMaxRetries(CompiledNode node) {
+        Object retries = node.getConfig().get("maxRetries");
+        if (retries instanceof Number) {
+            return ((Number) retries).intValue();
+        }
+        return 0;
+    }
+
+    private boolean canExecuteNode(ExecutionPlan plan, String nodeId, ExecutionContext context) {
+        Set<String> preds = plan.getPredecessors().get(nodeId);
+        if (preds == null || preds.isEmpty()) {
+            return true;
+        }
+
+        for (String pred : preds) {
+            ExecutionStatus status = context.getNodeStatuses().get(pred);
+            if (status == ExecutionStatus.SKIPPED || status == ExecutionStatus.COMPLETED) {
+                continue;
+            }
+            if (status == null) {
+                ExecutionStatus effectiveStatus = getEffectiveNodeStatus(plan, pred, context);
+                if (effectiveStatus == ExecutionStatus.SKIPPED) {
+                    context.getNodeStatuses().put(pred, ExecutionStatus.SKIPPED);
+                    continue;
+                }
+                if (effectiveStatus != ExecutionStatus.COMPLETED) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private ExecutionStatus getEffectiveNodeStatus(ExecutionPlan plan, String nodeId, ExecutionContext context) {
+        ExecutionStatus directStatus = context.getNodeStatuses().get(nodeId);
+        if (directStatus != null) {
+            return directStatus;
+        }
+
+        Set<String> preds = plan.getPredecessors().get(nodeId);
+        if (preds == null || preds.isEmpty()) {
+            return ExecutionStatus.COMPLETED;
+        }
+
+        for (String pred : preds) {
+            ExecutionStatus predStatus = context.getNodeStatuses().get(pred);
+            if (predStatus == null) {
+                ExecutionStatus effectivePredStatus = getEffectiveNodeStatus(plan, pred, context);
+                if (effectivePredStatus != ExecutionStatus.COMPLETED && effectivePredStatus != ExecutionStatus.SKIPPED) {
+                    return ExecutionStatus.PENDING;
+                }
+            } else if (predStatus != ExecutionStatus.COMPLETED && predStatus != ExecutionStatus.SKIPPED) {
+                return ExecutionStatus.PENDING;
+            }
+        }
+        return ExecutionStatus.SKIPPED;
+    }
+
+    private void markNodeCompleted(ExecutionPlan plan, String nodeId) {
+        Set<String> succs = plan.getSuccessors().get(nodeId);
+        if (succs != null) {
+            for (String successor : succs) {
+                plan.getCompletedPredecessors()
+                        .computeIfAbsent(successor, k -> new TreeSet<>())
+                        .add(nodeId);
+            }
+        }
+    }
+
+    private String findNextReadyNode(ExecutionPlan plan, ExecutionContext context) {
+        for (String nodeId : plan.getNodes().keySet()) {
+            ExecutionStatus status = context.getNodeStatuses().get(nodeId);
+            if (status == ExecutionStatus.COMPLETED || status == ExecutionStatus.RUNNING) {
+                continue;
+            }
+            if (canExecuteNode(plan, nodeId, context)) {
+                return nodeId;
+            }
+        }
+        return null;
     }
 
     /**

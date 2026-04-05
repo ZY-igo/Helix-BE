@@ -4,9 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Data
 public class ExecutionPlan implements Serializable {
@@ -26,4 +24,10 @@ public class ExecutionPlan implements Serializable {
     private PlanMetadata metadata;
 
     private ScheduleSpec schedule;
+
+    private Map<String, Set<String>> predecessors = new TreeMap<>();
+
+    private Map<String, Set<String>> successors = new TreeMap<>();
+
+    private Map<String, Set<String>> completedPredecessors = new TreeMap<>();
 }

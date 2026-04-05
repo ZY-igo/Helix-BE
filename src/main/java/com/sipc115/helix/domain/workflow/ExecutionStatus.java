@@ -26,6 +26,11 @@ public enum ExecutionStatus {
     WAITING_SIGNAL,
 
     /**
+     * 等待重试
+     */
+    WAITING_RETRY,
+
+    /**
      * 已完成
      */
     COMPLETED,
