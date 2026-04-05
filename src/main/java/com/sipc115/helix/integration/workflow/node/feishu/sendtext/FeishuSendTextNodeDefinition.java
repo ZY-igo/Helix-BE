@@ -10,13 +10,27 @@ import org.springframework.stereotype.Component;
  * <p>
  * 定义飞书发送文本消息节点（FEISHU_SEND_TEXT）的元数据。
  *
- * <h3>配置说明：</h3>
+ * <h3>DSL 配置示例：</h3>
  * <pre>
  * {
- *   "chatId": "chat_xxx",
- *   "text": "消息内容"
+ *   "id": "sendNotify",
+ *   "type": "FEISHU_SEND_TEXT",
+ *   "name": "发送飞书通知",
+ *   "category": "NOTIFICATION",
+ *   "config": {
+ *     "connectionId": 123,
+ *     "chatId": "oc_xxx",
+ *     "text": "工作流测试消息"
+ *   }
  * }
  * </pre>
+ *
+ * <h3>配置参数：</h3>
+ * <ul>
+ *   <li>connectionId - 飞书连接 ID（必填，指向 FEISHU 类型的集成连接）</li>
+ *   <li>chatId - 飞书群聊或用户 ID（必填）</li>
+ *   <li>text - 消息文本内容（必填）</li>
+ * </ul>
  *
  * @author Helix Team
  * @since 2.0.0

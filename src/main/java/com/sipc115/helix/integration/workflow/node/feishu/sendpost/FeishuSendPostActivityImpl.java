@@ -1,3 +1,4 @@
+/*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
 import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
@@ -24,7 +25,7 @@ public class FeishuSendPostActivityImpl implements FeishuSendPostActivity {
         try {
             log.info("Sending Feishu post message. chatId={}, title={}", chatId, title);
 
-            FeishuAuthClient authClient = (FeishuAuthClient) connectionRegistry.getOrCreateClient(connectionId, "FEISHU", null);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
 
             FeishuApiHandler handler = new FeishuApiHandler(

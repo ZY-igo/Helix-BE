@@ -11,13 +11,6 @@ import org.springframework.stereotype.Component;
 
 /**
  * 飞书发送文本消息 Activity 实现
- * <p>
- * Activity 执行时：
- * 1. 从节点配置获取 connectionId
- * 2. 通过 ConnectionClientRegistry 获取连接客户端
- * 3. 调用 getClientById 获取 FeishuAuthClient
- * 4. 通过 FeishuAuthClient 获取 token
- * 5. 创建 FeishuApiHandler 并调用 sendText
  */
 @Component
 public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
@@ -33,7 +26,7 @@ public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
         try {
             log.info("Sending Feishu text message. chatId={}, connectionId={}", chatId, connectionId);
 
-            FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", null);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
 
             FeishuApiHandler handler = new FeishuApiHandler(

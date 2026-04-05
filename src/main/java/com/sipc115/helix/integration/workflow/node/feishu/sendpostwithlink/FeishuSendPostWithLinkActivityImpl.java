@@ -1,3 +1,4 @@
+/*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
 import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
@@ -22,7 +23,7 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
         try {
             log.info("Sending Feishu post with link. chatId={}, url={}", chatId, url);
 
-            FeishuAuthClient authClient = (FeishuAuthClient) connectionRegistry.getOrCreateClient(connectionId, "FEISHU", null);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
 
             FeishuApiHandler handler = new FeishuApiHandler(

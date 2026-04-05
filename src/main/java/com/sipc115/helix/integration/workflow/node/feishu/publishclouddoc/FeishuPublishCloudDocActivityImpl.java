@@ -1,3 +1,4 @@
+/*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.publishclouddoc;
 
 import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
@@ -22,7 +23,7 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
         try {
             log.info("Publishing Feishu cloud doc. title={}", title);
 
-            FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", null);
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
 
             FeishuApiHandler handler = new FeishuApiHandler(
