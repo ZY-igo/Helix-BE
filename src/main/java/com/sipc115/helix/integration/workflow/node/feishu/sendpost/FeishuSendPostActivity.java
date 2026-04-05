@@ -7,5 +7,5 @@ import java.util.List;
 @ActivityInterface
 public interface FeishuSendPostActivity {
 
-    boolean sendPost(String chatId, String title, List<String> lines);
+    boolean sendPost(Long connectionId, String chatId, String title, List<String> lines);
 }

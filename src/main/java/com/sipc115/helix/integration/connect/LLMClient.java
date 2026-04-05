@@ -21,14 +21,6 @@ import java.util.Map;
  *   <li>LLM - 通用大语言模型</li>
  * </ul>
  *
- * <h3>支持的模型配置：</h3>
- * <ul>
- *   <li>baseUrl - API 基础 URL</li>
- *   <li>model - 模型名称（默认 glm-5）</li>
- *   <li>temperature - 生成温度（默认 1.0）</li>
- *   <li>maxTokens - 最大 Token 数（默认 4096）</li>
- * </ul>
- *
  * @author Helix Team
  * @see ConnectionClient
  * @see ConnectionClientRegistry
@@ -36,16 +28,9 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class LLMClient implements ConnectionClient {
+public class LLMClient implements ConnectionClient<Object> {
 
-    /**
-     * 连接类型标识
-     */
     private static final String CONNECTION_TYPE = "LLM";
-
-    /**
-     * JSON 序列化工具
-     */
     private final ObjectMapper objectMapper;
 
     @Override
@@ -53,14 +38,6 @@ public class LLMClient implements ConnectionClient {
         return CONNECTION_TYPE;
     }
 
-    /**
-     * 测试 LLM 连接
-     * <p>
-     * 发送一条简单的测试对话验证连接是否可用。
-     *
-     * @param config 连接配置
-     * @throws Exception 测试失败时抛出
-     */
     @Override
     public void test(Object config) throws Exception {
         Map<String, Object> configMap = toConfigMap(config);
@@ -88,23 +65,11 @@ public class LLMClient implements ConnectionClient {
                 .body(String.class);
     }
 
-    /**
-     * 发送 LLM 对话请求
-     * <p>
-     * 调用大语言模型对话接口。
-     *
-     * <h3>请求参数：</h3>
-     * <ul>
-     *   <li>systemPrompt - 系统提示词</li>
-     *   <li>userPrompt - 用户输入</li>
-     * </ul>
-     *
-     * @param config 连接配置
-     * @param params 请求参数
-     * @return 模型回复内容
-     * @throws Exception 请求失败时抛出
-     */
     @Override
+    public Object createClient(Object config) throws Exception {
+        return this;
+    }
+
     public Object send(Object config, Map<String, Object> params) throws Exception {
         Map<String, Object> configMap = toConfigMap(config);
 
@@ -145,9 +110,6 @@ public class LLMClient implements ConnectionClient {
         return extractContent(raw);
     }
 
-    /**
-     * 从 API 响应中提取内容
-     */
     private String extractContent(String raw) throws Exception {
         com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(raw);
         com.fasterxml.jackson.databind.JsonNode choices = root.path("choices");

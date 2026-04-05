@@ -20,12 +20,6 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 飞书发布云文档节点执行器
- *
- * @author Helix Team
- * @since 2.0.0
- */
 @Component
 public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
 
@@ -47,11 +41,13 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
         Map<String, Object> config = node.getConfig();
+        Long connectionId = getLongValue(config, "connectionId");
         String title = getStringValue(config, "title");
         String content = getStringValue(config, "content");
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "publishCloudDoc");
+        output.put("connectionId", connectionId);
         output.put("title", title);
         output.put("contentLength", content != null ? content.length() : 0);
 
@@ -60,7 +56,7 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
             ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
             ActivityFactory factory = bridge.activities();
             FeishuPublishCloudDocActivity activity = factory.getActivity(FeishuPublishCloudDocActivity.class, spec);
-            cloudDocUrl = activity.publishCloudDoc(title, content);
+            cloudDocUrl = activity.publishCloudDoc(connectionId, title, content);
 
             output.put("success", cloudDocUrl != null);
             output.put("result", cloudDocUrl);
@@ -68,7 +64,7 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发布云文档完成: title={}, url={}", title, cloudDocUrl);
+            log.info("发布云文档完成: connectionId={}, title={}, url={}", connectionId, title, cloudDocUrl);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -126,5 +122,12 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
     private String getStringValue(Map<String, Object> config, String key) {
         Object value = config.get(key);
         return value != null ? value.toString() : null;
+    }
+
+    private Long getLongValue(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) return null;
+        if (value instanceof Number) return ((Number) value).longValue();
+        return Long.parseLong(value.toString());
     }
 }

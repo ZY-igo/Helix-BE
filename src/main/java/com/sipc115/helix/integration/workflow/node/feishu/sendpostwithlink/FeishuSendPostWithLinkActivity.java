@@ -5,5 +5,5 @@ import io.temporal.activity.ActivityInterface;
 @ActivityInterface
 public interface FeishuSendPostWithLinkActivity {
 
-    boolean sendPostWithLink(String chatId, String title, String text, String url, String linkText);
+    boolean sendPostWithLink(Long connectionId, String chatId, String title, String text, String url, String linkText);
 }

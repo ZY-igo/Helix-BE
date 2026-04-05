@@ -3,14 +3,10 @@ package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
 import lombok.Data;
 
-/**
- * 飞书发送带链接富文本消息节点配置
- *
- * @author Helix Team
- * @since 2.0.0
- */
 @Data
 public class FeishuSendPostWithLinkConfig {
+
+    private Long connectionId;
 
     private String chatId;
 

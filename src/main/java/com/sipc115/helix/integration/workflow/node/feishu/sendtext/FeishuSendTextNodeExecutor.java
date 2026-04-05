@@ -49,11 +49,13 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
         Map<String, Object> config = node.getConfig();
+        Long connectionId = getLongValue(config, "connectionId");
         String chatId = getStringValue(config, "chatId");
         String text = getStringValue(config, "text");
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "sendText");
+        output.put("connectionId", connectionId);
         output.put("chatId", chatId);
         output.put("text", text);
 
@@ -62,13 +64,13 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
             ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
             ActivityFactory factory = bridge.activities();
             FeishuSendTextActivity activity = factory.getActivity(FeishuSendTextActivity.class, spec);
-            success = activity.sendText(chatId, text);
+            success = activity.sendText(connectionId, chatId, text);
 
             output.put("success", success);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送文本消息完成: chatId={}, success={}", chatId, success);
+            log.info("发送文本消息完成: connectionId={}, chatId={}, success={}", connectionId, chatId, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -126,5 +128,16 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
     private String getStringValue(Map<String, Object> config, String key) {
         Object value = config.get(key);
         return value != null ? value.toString() : null;
+    }
+
+    private Long getLongValue(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        return Long.parseLong(value.toString());
     }
 }

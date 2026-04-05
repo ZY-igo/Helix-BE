@@ -1,34 +1,52 @@
+/*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext;
 
-import com.sipc115.helix.integration.lark.FeishuClient;
+import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
+import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
+import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * 飞书发送文本消息 Activity 实现
+ * <p>
+ * Activity 执行时：
+ * 1. 从节点配置获取 connectionId
+ * 2. 通过 ConnectionClientRegistry 获取连接客户端
+ * 3. 调用 getClientById 获取 FeishuAuthClient
+ * 4. 通过 FeishuAuthClient 获取 token
+ * 5. 创建 FeishuApiHandler 并调用 sendText
+ */
 @Component
 public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendTextActivityImpl.class);
 
     @Autowired
-    private FeishuClient feishuClient;
+    private ConnectionClientRegistry connectionRegistry;
 
     @Override
-    public boolean sendText(String chatId, String text) {
+    @SuppressWarnings("unchecked")
+    public boolean sendText(Long connectionId, String chatId, String text) {
         try {
-            log.info("Sending Feishu text message. chatId={}", chatId);
+            log.info("Sending Feishu text message. chatId={}, connectionId={}", chatId, connectionId);
 
-            String messageId;
-            if (chatId == null || chatId.isEmpty()) {
-                messageId = feishuClient.sendText(text);
-            } else {
-                messageId = feishuClient.sendTextToChat(chatId, text);
-            }
+            FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", null);
+            String token = authClient.getToken();
+
+            FeishuApiHandler handler = new FeishuApiHandler(
+                    new com.fasterxml.jackson.databind.ObjectMapper(),
+                    org.springframework.web.client.RestClient.builder()
+            );
+
+            String messageId = handler.sendText(token, chatId, text);
+            log.info("Feishu message sent successfully. messageId={}", messageId);
 
             return messageId != null && !messageId.isEmpty();
         } catch (Exception e) {
-            log.error("Failed to send Feishu text message", e);
+            log.error("Failed to send Feishu text message. chatId={}, connectionId={}", chatId, connectionId, e);
             return false;
         }
     }

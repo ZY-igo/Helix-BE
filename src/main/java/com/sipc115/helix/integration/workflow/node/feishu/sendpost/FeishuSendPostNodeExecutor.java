@@ -21,12 +21,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 飞书发送富文本消息节点执行器
- *
- * @author Helix Team
- * @since 2.0.0
- */
 @Component
 public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
@@ -48,12 +42,14 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
         Map<String, Object> config = node.getConfig();
+        Long connectionId = getLongValue(config, "connectionId");
         String chatId = getStringValue(config, "chatId");
         String title = getStringValue(config, "title");
         List<String> lines = getStringListValue(config, "lines");
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "sendPost");
+        output.put("connectionId", connectionId);
         output.put("chatId", chatId);
         output.put("title", title);
         output.put("lines", lines);
@@ -63,13 +59,13 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
             ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
             ActivityFactory factory = bridge.activities();
             FeishuSendPostActivity activity = factory.getActivity(FeishuSendPostActivity.class, spec);
-            success = activity.sendPost(chatId, title, lines);
+            success = activity.sendPost(connectionId, chatId, title, lines);
 
             output.put("success", success);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送富文本消息完成: chatId={}, title={}, success={}", chatId, title, success);
+            log.info("发送富文本消息完成: connectionId={}, chatId={}, title={}, success={}", connectionId, chatId, title, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -127,6 +123,13 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
     private String getStringValue(Map<String, Object> config, String key) {
         Object value = config.get(key);
         return value != null ? value.toString() : null;
+    }
+
+    private Long getLongValue(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) return null;
+        if (value instanceof Number) return ((Number) value).longValue();
+        return Long.parseLong(value.toString());
     }
 
     @SuppressWarnings("unchecked")

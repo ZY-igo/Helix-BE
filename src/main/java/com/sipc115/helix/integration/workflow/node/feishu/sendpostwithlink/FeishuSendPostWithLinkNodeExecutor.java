@@ -20,12 +20,6 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 飞书发送带链接富文本消息节点执行器
- *
- * @author Helix Team
- * @since 2.0.0
- */
 @Component
 public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor {
 
@@ -47,6 +41,7 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
         Map<String, Object> config = node.getConfig();
+        Long connectionId = getLongValue(config, "connectionId");
         String chatId = getStringValue(config, "chatId");
         String title = getStringValue(config, "title");
         String text = getStringValue(config, "text");
@@ -55,6 +50,7 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "sendPostWithLink");
+        output.put("connectionId", connectionId);
         output.put("chatId", chatId);
         output.put("title", title);
         output.put("text", text);
@@ -66,13 +62,13 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
             ActivityInvocationSpec spec = ActivityInvocationSpec.fromNodeConfig(config);
             ActivityFactory factory = bridge.activities();
             FeishuSendPostWithLinkActivity activity = factory.getActivity(FeishuSendPostWithLinkActivity.class, spec);
-            success = activity.sendPostWithLink(chatId, title, text, url, linkText);
+            success = activity.sendPostWithLink(connectionId, chatId, title, text, url, linkText);
 
             output.put("success", success);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送带链接富文本消息完成: chatId={}, url={}, success={}", chatId, url, success);
+            log.info("发送带链接富文本消息完成: connectionId={}, chatId={}, url={}, success={}", connectionId, chatId, url, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -130,5 +126,12 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
     private String getStringValue(Map<String, Object> config, String key) {
         Object value = config.get(key);
         return value != null ? value.toString() : null;
+    }
+
+    private Long getLongValue(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) return null;
+        if (value instanceof Number) return ((Number) value).longValue();
+        return Long.parseLong(value.toString());
     }
 }

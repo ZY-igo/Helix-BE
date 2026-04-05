@@ -12,6 +12,8 @@ import lombok.Data;
 @Data
 public class FeishuSendTextConfig {
 
+    private Long connectionId;
+
     private String chatId;
 
     private String text;

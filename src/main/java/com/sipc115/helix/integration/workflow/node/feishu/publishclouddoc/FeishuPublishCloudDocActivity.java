@@ -5,5 +5,5 @@ import io.temporal.activity.ActivityInterface;
 @ActivityInterface
 public interface FeishuPublishCloudDocActivity {
 
-    String publishCloudDoc(String title, String content);
+    String publishCloudDoc(Long connectionId, String title, String content);
 }
