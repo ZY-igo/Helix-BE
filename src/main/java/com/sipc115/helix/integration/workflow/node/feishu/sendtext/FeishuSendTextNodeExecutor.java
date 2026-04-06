@@ -87,7 +87,16 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         Map<String, Object> config = node.getConfig();
         Long connectionId = getLongValue(config, "connectionId");
         if (connectionId == null) {
-            throw new IllegalArgumentException("节点配置错误: connectionId 不能为空，节点ID: " + node.getId());
+            String errorMsg = String.format(
+                "节点配置错误: connectionId 不能为空\n" +
+                "节点ID: %s\n" +
+                "当前配置: %s\n" +
+                "请在 DSL 中配置 connectionId 字段，指向有效的飞书集成连接",
+                node.getId(),
+                config.keySet()
+            );
+            log.error(errorMsg);
+            throw new IllegalArgumentException(errorMsg);
         }
         String chatId = getStringValue(config, "chatId");
         String text = getStringValue(config, "text");

@@ -3,7 +3,7 @@ package com.sipc115.helix.integration.workflow.service;
 
 import com.sipc115.helix.domain.workflow.*;
 import com.sipc115.helix.integration.workflow.compiler.DefaultDslCompiler;
-import com.sipc115.helix.integration.workflow.repository.ExecutionPlanRepository;
+import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
 import com.sipc115.helix.repository.jpa.NodeExecutionTraceRepository;
 import com.sipc115.helix.repository.jpa.WorkflowExecutionRepository;
 import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
