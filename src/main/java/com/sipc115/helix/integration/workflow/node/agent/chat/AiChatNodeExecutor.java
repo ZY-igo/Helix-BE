@@ -144,7 +144,13 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
             log.info("执行 AI 聊天节点: {}, connectionId: {}", node.getId(), connectionId);
 
-            LlmAuthClient llmClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            LlmAuthClient llmClient;
+            Object cachedConfig = config.get("_connectionConfig");
+            if (cachedConfig != null) {
+                llmClient = connectionRegistry.getOrCreateClient(connectionId, "LLM", cachedConfig);
+            } else {
+                llmClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            }
             String response = llmClient.chat(systemPrompt, userPrompt, temperature, maxTokens, thinking);
 
             Map<String, Object> output = new HashMap<>();

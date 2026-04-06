@@ -1,5 +1,5 @@
 /*-*- coding: UTF-8 -*-*/
-package com.sipc115.helix.controller;
+package com.sipc115.helix.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

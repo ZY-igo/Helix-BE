@@ -271,6 +271,25 @@ public class WorkflowTraceService {
     }
 
     /**
+     * 根据执行ID获取执行状态视图
+     *
+     * @param executionId 执行记录ID
+     * @return 工作流状态视图，如果不存在返回 null
+     */
+    public com.sipc115.helix.domain.workflow.WorkflowStateView getExecutionStateView(Long executionId) {
+        return executionRepo.findById(executionId)
+                .map(entity -> {
+                    com.sipc115.helix.domain.workflow.WorkflowStateView view =
+                            new com.sipc115.helix.domain.workflow.WorkflowStateView();
+                    view.setWorkflowId(entity.getWorkflowId());
+                    view.setStatus(com.sipc115.helix.domain.workflow.ExecutionStatus.valueOf(entity.getStatus()));
+                    view.setVariables(entity.getOutput() != null ? entity.getOutput() : new java.util.HashMap<>());
+                    return view;
+                })
+                .orElse(null);
+    }
+
+    /**
      * 查询某次执行的所有节点追踪记录
      */
     public List<NodeExecutionTraceEntity> getNodeTraces(Long executionId) {

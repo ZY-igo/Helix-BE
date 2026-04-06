@@ -22,6 +22,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 工作流应用服务层
+ *
+ * <p>负责工作流 DSL 和执行计划（Execution Plan）的生命周期管理，包括创建、版本控制、发布以及编译。</p>
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ */
 @Service
 public class WorkflowApplicationService {
 
@@ -46,12 +54,21 @@ public class WorkflowApplicationService {
         this.dslCompiler = dslCompiler;
     }
 
+    /**
+     * 创建一个新的工作流定义。
+     *
+     * @param name      工作流显示名称
+     * @param createdBy 创建人标识
+     * @return 保存后的工作流实体
+     */
     @Transactional
     public WorkflowDslEntity createWorkflow(String name, String createdBy) {
         log.info("Creating new workflow. name={}, createdBy={}", name, createdBy);
 
+        // 调用领域服务生成初始的 DSL 对象
         WorkflowDsl dsl = WorkflowDslDomainService.createNew(name, createdBy);
 
+        // 转换为持久化实体并保存
         WorkflowDslEntity entity = toEntity(dsl, createdBy);
         WorkflowDslEntity saved = dslRepository.save(entity);
 
@@ -59,15 +76,24 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+    /**
+     * 保存工作流的修改内容。
+     *
+     * @param dsl       更新后的工作流 DSL 对象
+     * @param updatedBy 更新人标识
+     * @return 保存后的工作流实体
+     */
     @Transactional
     public WorkflowDslEntity saveWorkflow(WorkflowDsl dsl, String updatedBy) {
         log.info("Saving workflow. workflowId={}, version={}", dsl.getWorkflowId(), dsl.getVersion());
 
+        // 确保数据库中已存在该版本的工作流
         WorkflowDslEntity existing = dslRepository
                 .findByWorkflowIdAndVersion(dsl.getWorkflowId(), dsl.getVersion())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Workflow not found: " + dsl.getWorkflowId() + " v" + dsl.getVersion()));
 
+        // 更新 JSON 内容和元数据，并将状态重置为草稿
         existing.setDslContent(toJson(dsl));
         existing.setMetadata(toJson(dsl.getMetadata()));
         existing.setStatus("DRAFT");
@@ -80,6 +106,15 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+    /**
+     * 基于现有工作流创建一个新版本（复制）。
+     *
+     * @param sourceWorkflowId 源工作流 ID
+     * @param sourceVersion    源版本号
+     * @param newVersion       新目标版本号（若为空则自动递增）
+     * @param createdBy        创建人标识
+     * @return 新版本的工作流实体
+     */
     @Transactional
     public WorkflowDslEntity createCopy(String sourceWorkflowId, String sourceVersion,
                                         String newVersion, String createdBy) {
@@ -93,6 +128,7 @@ public class WorkflowApplicationService {
 
         WorkflowDsl sourceDsl = parseDsl(source);
 
+        // 确定目标版本号并执行领域层的复制逻辑
         String targetVersion = newVersion != null ? newVersion : WorkflowVersionUtils.nextMinorVersion(sourceVersion);
         WorkflowDsl copiedDsl = WorkflowDslDomainService.copyAsNewVersion(sourceDsl, targetVersion);
 
@@ -105,6 +141,16 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+    /**
+     * 将现有工作流复制为一个全新的工作流 ID。
+     *
+     * @param sourceWorkflowId 源工作流 ID
+     * @param sourceVersion    源版本号
+     * @param newWorkflowId    新工作流 ID
+     * @param newVersion       新初始版本号
+     * @param createdBy        创建人标识
+     * @return 新工作流实体
+     */
     @Transactional
     public WorkflowDslEntity createCopyAsNewWorkflow(String sourceWorkflowId, String sourceVersion,
                                                      String newWorkflowId, String newVersion,
@@ -131,22 +177,41 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+    /**
+     * 获取指定版本的工作流详情。
+     */
     public WorkflowDslEntity getWorkflow(String workflowId, String version) {
         return dslRepository.findByWorkflowIdAndVersion(workflowId, version)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Workflow not found: " + workflowId + " v" + version));
     }
 
+    /**
+     * 获取指定工作流最新已发布的版本。
+     */
     public WorkflowDslEntity getLatestPublishedWorkflow(String workflowId) {
         return dslRepository.findFirstByWorkflowIdAndStatusOrderByCreatedAtDesc(workflowId, "PUBLISHED")
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No published workflow found: " + workflowId));
     }
 
+    /**
+     * 获取指定工作流的所有历史版本。
+     */
     public List<WorkflowDslEntity> getAllVersions(String workflowId) {
         return dslRepository.findByWorkflowIdOrderByCreatedAtDesc(workflowId);
     }
 
+    /**
+     * 发布工作流。
+     *
+     * <p>发布时会将该工作流下其他已发布的版本标记为“DEPRECATED”（废弃），确保同一时间只有一个生效版本。</p>
+     *
+     * @param workflowId 工作流 ID
+     * @param version    待发布的版本号
+     * @param updatedBy  操作人标识
+     * @return 发布后的工作流实体
+     */
     @Transactional
     public WorkflowDslEntity publish(String workflowId, String version, String updatedBy) {
         log.info("Publishing workflow. workflowId={}, version={}", workflowId, version);
@@ -156,6 +221,7 @@ public class WorkflowApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Workflow not found: " + workflowId + " v" + version));
 
+        // 废弃旧的已发布版本
         dslRepository.findByWorkflowIdOrderByCreatedAtDesc(workflowId).stream()
                 .filter(e -> "PUBLISHED".equals(e.getStatus()))
                 .forEach(e -> {
@@ -175,16 +241,26 @@ public class WorkflowApplicationService {
     }
 
 
+    /**
+     * 保存工作流并立即触发编译，生成可执行的 ExecutionPlan。
+     *
+     * @param dsl        工作流 DSL 对象
+     * @param compiledBy 编译人标识
+     * @return 生成的执行计划实体
+     */
     @Transactional
     public ExecutionPlanEntity saveAndCompile(WorkflowDsl dsl, String compiledBy) {
         log.info("Saving and compiling workflow. workflowId={}, version={}",
                 dsl.getWorkflowId(), dsl.getVersion());
 
+        // 先持久化 DSL 定义
         WorkflowDslEntity entity = saveWorkflow(dsl, compiledBy);
 
+        // 调用领域服务进行编译，将 DSL 转换为扁平化的执行计划
         WorkflowCompileDomainService compileService = new WorkflowCompileDomainService(dslCompiler);
         ExecutionPlan plan = compileService.compile(dsl);
 
+        // 使用雪花算法生成唯一的计划 ID
         String planId = String.valueOf(idGenerator.nextId());
         plan.setPlanId(planId);
 
@@ -203,6 +279,9 @@ public class WorkflowApplicationService {
         return saved;
     }
 
+    /**
+     * 获取指定版本的执行计划。
+     */
     public ExecutionPlan getExecutionPlan(String workflowId, String version) {
         ExecutionPlanEntity entity = planRepository
                 .findByWorkflowIdAndVersion(workflowId, version)
@@ -212,6 +291,9 @@ public class WorkflowApplicationService {
         return parsePlan(entity);
     }
 
+    /**
+     * 将领域对象转换为数据库实体。
+     */
     private WorkflowDslEntity toEntity(WorkflowDsl dsl, String createdBy) {
         WorkflowDslEntity entity = new WorkflowDslEntity();
         entity.setWorkflowId(dsl.getWorkflowId());
@@ -226,6 +308,9 @@ public class WorkflowApplicationService {
         return entity;
     }
 
+    /**
+     * 将数据库实体解析为 DSL 领域对象。
+     */
     private WorkflowDsl parseDsl(WorkflowDslEntity entity) {
         try {
             return objectMapper.readValue(entity.getDslContent(), WorkflowDsl.class);
@@ -234,6 +319,9 @@ public class WorkflowApplicationService {
         }
     }
 
+    /**
+     * 将数据库实体解析为执行计划对象。
+     */
     private ExecutionPlan parsePlan(ExecutionPlanEntity entity) {
         try {
             return objectMapper.readValue(entity.getPlanContent(), ExecutionPlan.class);
@@ -242,6 +330,9 @@ public class WorkflowApplicationService {
         }
     }
 
+    /**
+     * 将对象序列化为 JSON 字符串。
+     */
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);

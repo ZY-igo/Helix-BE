@@ -69,6 +69,10 @@ public class FeishuSendPostNodeCompiler implements NodeCompiler {
         if (config.getLines() == null || config.getLines().isEmpty()) {
             throw new IllegalArgumentException("lines 不能为空");
         }
+
+        if (source.getConfig() != null && connection.getConfig() != null) {
+            source.getConfig().put("_connectionConfig", connection.getConfig());
+        }
     }
 
     @Override

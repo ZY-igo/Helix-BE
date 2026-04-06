@@ -4,6 +4,7 @@ package com.sipc115.helix.integration.workflow.runtime;
 import com.sipc115.helix.domain.workflow.*;
 
 import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBridge;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 
@@ -44,6 +45,7 @@ import java.util.*;
  * @see NodeExecutorRegistry
  * @see TransitionResolver
  */
+@Slf4j
 public class DslOrchestratorWorkflowImpl {
 
     /**
@@ -277,6 +279,7 @@ public class DslOrchestratorWorkflowImpl {
     ) {
         context.setWorkflowStatus(ExecutionStatus.RUNNING);
 
+        // 获取需要保存的参数变量的名称集合
         Set<String> neededNodeOutputs = computeNeededNodeOutputs(plan);
         context.getNeededNodeOutputs().addAll(neededNodeOutputs);
 

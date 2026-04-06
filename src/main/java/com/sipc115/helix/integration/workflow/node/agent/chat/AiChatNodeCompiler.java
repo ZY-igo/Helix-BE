@@ -76,6 +76,10 @@ public class AiChatNodeCompiler implements NodeCompiler {
         if (userPromptStr.isEmpty()) {
             throw new IllegalArgumentException("AI 聊天节点的 userPrompt 不能为空: " + source.getId());
         }
+
+        if (connection.getConfig() != null) {
+            config.put("_connectionConfig", connection.getConfig());
+        }
     }
 
     @Override

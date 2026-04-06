@@ -67,6 +67,10 @@ public class FeishuSendTextNodeCompiler implements NodeCompiler {
         if (!"FEISHU".equals(connection.getType())) {
             throw new IllegalArgumentException("连接类型必须为 FEISHU，实际为: " + connection.getType());
         }
+
+        if (source.getConfig() != null && connection.getConfig() != null) {
+            source.getConfig().put("_connectionConfig", connection.getConfig());
+        }
     }
 
     @Override

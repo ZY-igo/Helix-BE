@@ -4,6 +4,7 @@ package com.sipc115.helix.integration.workflow.service;
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionEntity;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionRequest;
+import com.sipc115.helix.domain.workflow.WorkflowStartResponse;
 import com.sipc115.helix.integration.workflow.engine.DslRuntimeWorkflow;
 import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
 import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
@@ -40,13 +41,19 @@ public class WorkflowExecutionApplicationService {
         this.traceService = traceService;
     }
 
-    public String start(WorkflowExecutionRequest request) {
+    /**
+     * 启动工作流执行
+     *
+     * @param request 工作流执行请求
+     * @return 包含 executionId 和 temporalWorkflowId 的响应
+     */
+    public WorkflowStartResponse start(WorkflowExecutionRequest request) {
         ExecutionPlan plan = loadExecutionPlan(request.getWorkflowId(), request.getWorkflowVersion())
             .orElseThrow(() -> new IllegalArgumentException(
                 "Execution plan not found: workflowId=" + request.getWorkflowId() +
                 ", version=" + request.getWorkflowVersion()));
 
-        String workflowId = request.getWorkflowId() + "-v" + request.getWorkflowVersion() + "-" + System.currentTimeMillis();
+        String temporalWorkflowId = request.getWorkflowId() + "-v" + request.getWorkflowVersion() + "-" + System.currentTimeMillis();
 
         WorkflowExecutionEntity execution = traceService.startExecution(
             request.getWorkflowId(),
@@ -63,12 +70,18 @@ public class WorkflowExecutionApplicationService {
 
         WorkflowOptions options = WorkflowOptions.newBuilder()
             .setTaskQueue(TASK_QUEUE)
-            .setWorkflowId(workflowId)
+            .setWorkflowId(temporalWorkflowId)
             .build();
 
         DslRuntimeWorkflow workflow = workflowClient.newWorkflowStub(DslRuntimeWorkflow.class, options);
         WorkflowClient.start(workflow::run, plan, inputWithExecutionId);
-        return workflowId;
+
+        WorkflowStartResponse response = new WorkflowStartResponse();
+        response.setExecutionId(execution.getId());
+        response.setTemporalWorkflowId(temporalWorkflowId);
+        response.setStatus("STARTED");
+        response.setMessage("工作流已启动");
+        return response;
     }
 
     private java.util.Optional<ExecutionPlan> loadExecutionPlan(String workflowId, String version) {

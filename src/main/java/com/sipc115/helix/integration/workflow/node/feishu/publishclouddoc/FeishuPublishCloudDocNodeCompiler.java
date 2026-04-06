@@ -61,6 +61,10 @@ public class FeishuPublishCloudDocNodeCompiler implements NodeCompiler {
         if (config.getContent() == null || config.getContent().isEmpty()) {
             throw new IllegalArgumentException("content 不能为空");
         }
+
+        if (source.getConfig() != null && connection.getConfig() != null) {
+            source.getConfig().put("_connectionConfig", connection.getConfig());
+        }
     }
 
     @Override

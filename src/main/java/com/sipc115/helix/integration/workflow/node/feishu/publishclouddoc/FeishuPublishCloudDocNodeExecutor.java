@@ -51,6 +51,9 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
 
         Map<String, Object> config = node.getConfig();
         Long connectionId = getLongValue(config, "connectionId");
+        if (connectionId == null) {
+            throw new IllegalArgumentException("节点配置错误: connectionId 不能为空，节点ID: " + node.getId());
+        }
         String title = getStringValue(config, "title");
         String content = getStringValue(config, "content");
 
@@ -62,7 +65,13 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
 
         String cloudDocUrl = null;
         try {
-            FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            FeishuAuthClient authClient;
+            Object cachedConfig = config.get("_connectionConfig");
+            if (cachedConfig != null) {
+                authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", cachedConfig);
+            } else {
+                authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+            }
             String token = authClient.getToken();
             FeishuApiHandler handler = new FeishuApiHandler(
                     new ObjectMapper(),

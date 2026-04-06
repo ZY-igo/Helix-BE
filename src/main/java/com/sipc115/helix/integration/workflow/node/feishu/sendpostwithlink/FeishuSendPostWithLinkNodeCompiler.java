@@ -76,6 +76,10 @@ public class FeishuSendPostWithLinkNodeCompiler implements NodeCompiler {
         if (config.getLinkText() == null || config.getLinkText().isEmpty()) {
             throw new IllegalArgumentException("linkText 不能为空");
         }
+
+        if (source.getConfig() != null && connection.getConfig() != null) {
+            source.getConfig().put("_connectionConfig", connection.getConfig());
+        }
     }
 
     @Override
