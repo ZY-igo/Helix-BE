@@ -1,3 +1,4 @@
+/*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent.chat;
 
 import com.sipc115.helix.common.constant.NodeRoleConstants;
@@ -5,9 +6,8 @@ import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionStatus;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
-import com.sipc115.helix.integration.connect.llm.LlmAuthClient;
 import com.sipc115.helix.integration.expression.ExpressionEngine;
+import com.sipc115.helix.integration.workflow.node.agent.chat.activity.AiChatActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -41,25 +41,27 @@ import java.util.Map;
  * }
  * </pre>
  *
+ * <h3>架构说明（使用 Temporal Activity）：</h3>
+ * <p>
+ * 此执行器将 API 调用委托给 Temporal Activity 执行，
+ * 保证 Workflow 的确定性。
+ *
  * <h3>执行流程：</h3>
  * <pre>
- * 1. 验证配置（connectionId, userPrompt 必须）
- * 2. 表达式求值（userPrompt 中的 ${} 替换为实际值）
- * 3. 获取 LLM 客户端（通过 ConnectionClientRegistry）
- * 4. 调用 LLM API 获取响应
- * 5. 整理输出结果并返回
+ * Temporal Workflow Thread
+ *   └─ AiChatNodeExecutor.execute()
+ *       └─ bridge.activities().getActivity(AiChatActivity.class)
+ *           └─ AiChatActivity.chat()  ← 在 Activity Worker 上执行
+ *               └─ LlmAuthClient.chat()   ← 真正的 HTTP 调用
  * </pre>
  *
- * <h3>输出格式：</h3>
+ * <h3>与旧架构对比：</h3>
  * <pre>
- * {
- *   "action": "aiChat",
- *   "connectionId": 1,
- *   "model": "glm-4",
- *   "analysisResult": "这是AI的分析结果...",
- *   "status": "success",
- *   "timestamp": 1234567890
- * }
+ * 旧架构（直接调用 - 违反确定性原则）：
+ *   Executor → LlmAuthClient → LLM API  ❌ HTTP 调用在 Workflow 线程
+ *
+ * 新架构（Activity 委托 - 正确做法）：
+ *   Executor → AiChatActivity → LlmAuthClient  ✅ HTTP 调用在 Activity Worker
  * </pre>
  *
  * <h3>表达式缓存机制：</h3>
@@ -70,7 +72,7 @@ import java.util.Map;
  * @author Helix Team
  * @since 2.0.0
  * @see WorkflowNodeExecutor
- * @see LlmAuthClient
+ * @see AiChatActivity
  * @see ExpressionEngine
  */
 @Component
@@ -79,17 +81,11 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
     private static final Logger log = LoggerFactory.getLogger(AiChatNodeExecutor.class);
 
     private static WorkflowTraceService traceService;
-    private static ConnectionClientRegistry connectionRegistry;
     private static ExpressionEngine expressionEngine;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         AiChatNodeExecutor.traceService = traceService;
-    }
-
-    @Autowired
-    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
-        AiChatNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Autowired
@@ -144,19 +140,29 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
             log.info("执行 AI 聊天节点: {}, connectionId: {}", node.getId(), connectionId);
 
-            LlmAuthClient llmClient;
+            // 通过 Bridge 获取 Temporal Activity 存根
+            // Activity 调用会在 Activity Worker 上执行，而不是 Workflow 线程
+            AiChatActivity activity = bridge.activities().getActivity(AiChatActivity.class);
+
+            String response;
             Object cachedConfig = config.get("_connectionConfig");
             if (cachedConfig != null) {
-                llmClient = connectionRegistry.getOrCreateClient(connectionId, "LLM", cachedConfig);
+                // 使用连接配置调用（避免重复查询）
+                response = activity.chatWithConfig(cachedConfig, systemPrompt, userPrompt, temperature, maxTokens, thinking);
             } else {
-                llmClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+                // 使用 connectionId 调用
+                response = activity.chat(connectionId, systemPrompt, userPrompt, temperature, maxTokens, thinking);
             }
-            String response = llmClient.chat(systemPrompt, userPrompt, temperature, maxTokens, thinking);
+
+            // 从 Activity 返回结果中获取 model 信息
+            // 注意：Activity 直接返回的是 response 字符串，model 信息需要从别处获取
+            // 这里暂时使用配置中的默认值
+            String model = getStringValue(config.get("model"), "unknown");
 
             Map<String, Object> output = new HashMap<>();
             output.put("action", "aiChat");
             output.put("connectionId", connectionId);
-            output.put("model", llmClient.getModel());
+            output.put("model", model);
             output.put(outputVar, response);
             output.put("status", "success");
             output.put("timestamp", System.currentTimeMillis());
@@ -244,12 +250,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 安全获取 Long 类型值
-     * <p>
-     * 支持 Number 类型和字符串类型的转换。
-     *
-     * @param value 原始值
-     * @return Long 类型值
-     * @throws NumberFormatException 如果值无法转换为 Long
      */
     private Long getLongValue(Object value) {
         if (value == null) {
@@ -263,12 +263,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 安全获取 String 类型值
-     * <p>
-     * 如果值为 null，返回默认值。
-     *
-     * @param value 原始值
-     * @param defaultValue 默认值
-     * @return String 类型值
      */
     private String getStringValue(Object value, String defaultValue) {
         if (value == null) {
@@ -279,12 +273,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 安全获取 Double 类型值
-     * <p>
-     * 支持 Number 类型和字符串类型的转换。
-     *
-     * @param value 原始值
-     * @param defaultValue 默认值
-     * @return Double 类型值
      */
     private Double getDoubleValue(Object value, Double defaultValue) {
         if (value == null) {
@@ -298,12 +286,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 安全获取 Integer 类型值
-     * <p>
-     * 支持 Number 类型和字符串类型的转换。
-     *
-     * @param value 原始值
-     * @param defaultValue 默认值
-     * @return Integer 类型值
      */
     private Integer getIntValue(Object value, Integer defaultValue) {
         if (value == null) {

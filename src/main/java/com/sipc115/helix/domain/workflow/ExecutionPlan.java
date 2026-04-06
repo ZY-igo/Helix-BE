@@ -3,7 +3,6 @@ package com.sipc115.helix.domain.workflow;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.*;
 
 /**
@@ -66,7 +65,6 @@ import java.util.*;
  * @since 2.0.0
  * @see CompiledNode
  * @see Transition
- * @see DefaultDslCompiler
  */
 @Data
 public class ExecutionPlan implements Serializable {
@@ -96,7 +94,7 @@ public class ExecutionPlan implements Serializable {
      * <p>
      * key: 节点ID, value: 编译后的节点
      */
-    private Map<String, CompiledNode> nodes = new HashMap<>();
+    private Map<String, CompiledNode> nodes = new TreeMap<>();
 
     /**
      * 工作流中的所有边（转换关系）
