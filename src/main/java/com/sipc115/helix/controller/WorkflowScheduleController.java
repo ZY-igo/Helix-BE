@@ -18,10 +18,16 @@ import java.util.Map;
  *
  * <h3>主要功能：</h3>
  * <ul>
- *   <li>POST /api/schedules/{workflowId} - 为工作流创建调度（自动读取 DSL 中的 cron）</li>
+ *   <li>POST /api/schedules/{workflowId} - 为工作流创建调度</li>
  *   <li>POST /api/schedules/{scheduleId}/pause - 暂停调度</li>
  *   <li>POST /api/schedules/{scheduleId}/resume - 恢复调度</li>
  *   <li>DELETE /api/schedules/{scheduleId} - 删除调度</li>
+ * </ul>
+ *
+ * <h3>重要说明：</h3>
+ * <ul>
+ *   <li>执行计划未找到时会自动编译最新 DSL</li>
+ *   <li>调度创建后会由 Temporal Server 按 Cron 表达式自动触发</li>
  * </ul>
  *
  * @author Helix Team
@@ -42,10 +48,12 @@ public class WorkflowScheduleController {
     }
 
     /**
-     * 为工作流创建定时调度
+     * 创建定时调度
      * <p>
-     * 自动从已发布的 DSL 中读取 schedule 配置（Cron 表达式或间隔），
-     * 并创建 Temporal Schedule。
+     * 自动查找或编译执行计划，然后创建 Temporal Schedule。
+     * 1. 优先查找已发布的执行计划
+     * 2. 如果没有已发布的执行计划，查找最新版本并自动编译保存
+     * 3. 如果没有任何版本，抛出异常
      *
      * @param workflowId 工作流 ID
      * @return 调度响应
@@ -81,6 +89,9 @@ public class WorkflowScheduleController {
 
     /**
      * 暂停调度
+     *
+     * @param scheduleId 调度 ID
+     * @return 空响应
      */
     @PostMapping("/{scheduleId}/pause")
     public ResponseEntity<Void> pauseSchedule(@PathVariable String scheduleId) {
@@ -97,6 +108,9 @@ public class WorkflowScheduleController {
 
     /**
      * 恢复调度
+     *
+     * @param scheduleId 调度 ID
+     * @return 空响应
      */
     @PostMapping("/{scheduleId}/resume")
     public ResponseEntity<Void> resumeSchedule(@PathVariable String scheduleId) {
@@ -113,6 +127,9 @@ public class WorkflowScheduleController {
 
     /**
      * 删除调度
+     *
+     * @param scheduleId 调度 ID
+     * @return 空响应
      */
     @DeleteMapping("/{scheduleId}")
     public ResponseEntity<Void> deleteSchedule(@PathVariable String scheduleId) {

@@ -17,11 +17,30 @@ import java.util.Map;
 
 /**
  * 工作流管理控制器
+ * <p>
+ * 提供工作流 DSL 的创建、保存、版本控制、发布以及编译等 REST API。
  *
- * <p>提供工作流 DSL 的创建、保存、版本控制、发布以及编译等 RESTful 接口。</p>
+ * <h3>主要功能：</h3>
+ * <ul>
+ *   <li>POST /api/workflows/create - 创建工作流</li>
+ *   <li>POST /api/workflows/save - 保存工作流修改</li>
+ *   <li>POST /api/workflows/copy - 复制工作流</li>
+ *   <li>GET /api/workflows - 获取指定版本工作流</li>
+ *   <li>GET /api/workflows/latest-published - 获取最新已发布版本</li>
+ *   <li>GET /api/workflows/versions - 获取所有历史版本</li>
+ *   <li>POST /api/workflows/publish - 发布工作流</li>
+ *   <li>POST /api/workflows/save-and-compile - 保存并编译</li>
+ * </ul>
+ *
+ * <h3>重要说明：</h3>
+ * <ul>
+ *   <li>工作流发布后，旧版本自动标记为 DEPRECATED</li>
+ *   <li>save-and-compile 会先保存 DSL 再编译为 ExecutionPlan</li>
+ * </ul>
  *
  * @author Helix Team
  * @since 2.0.0
+ * @see WorkflowApplicationService
  */
 @RestController
 @RequestMapping("/api/workflows")
@@ -36,7 +55,7 @@ public class WorkflowController {
     }
 
     /**
-     * 创建一个全新的工作流。
+     * 创建工作流
      *
      * @param request 包含工作流名称和创建人信息的请求体
      * @return 初始化后的工作流实体（状态为 DRAFT）
@@ -52,7 +71,7 @@ public class WorkflowController {
     }
 
     /**
-     * 保存工作流的修改内容。
+     * 保存工作流修改
      *
      * @param request 包含更新后的 DSL 对象和更新人信息的请求体
      * @return 保存后的工作流实体
@@ -69,9 +88,11 @@ public class WorkflowController {
     }
 
     /**
-     * 复制工作流。支持两种模式：
-     * 1. 同一工作流 ID 下的版本迭代（newWorkflowId 为空）。
-     * 2. 基于现有工作流创建一个全新的工作流 ID（newWorkflowId 不为空）。
+     * 复制工作流
+     * <p>
+     * 支持两种模式：
+     * 1. 同一工作流 ID 下的版本迭代（newWorkflowId 为空）
+     * 2. 基于现有工作流创建全新的工作流 ID（newWorkflowId 不为空）
      *
      * @param request 包含源工作流信息和新版本/新 ID 的请求体
      * @return 复制后的新工作流实体
@@ -105,7 +126,7 @@ public class WorkflowController {
     }
 
     /**
-     * 获取指定版本的工作流详情。
+     * 获取指定版本的工作流
      *
      * @param workflowId 工作流唯一标识
      * @param version    版本号
@@ -122,7 +143,7 @@ public class WorkflowController {
     }
 
     /**
-     * 获取指定工作流最新已发布的版本。
+     * 获取最新已发布的工作流版本
      *
      * @param workflowId 工作流唯一标识
      * @return 最近一次发布的工作流实体
@@ -136,10 +157,10 @@ public class WorkflowController {
     }
 
     /**
-     * 获取指定工作流的所有历史版本列表（按创建时间倒序）。
+     * 获取所有历史版本列表
      *
      * @param workflowId 工作流唯一标识
-     * @return 工作流实体列表
+     * @return 工作流实体列表（按创建时间倒序）
      */
     @GetMapping("/versions")
     public ResponseEntity<List<WorkflowDslEntity>> getAllVersions(@RequestParam String workflowId) {
@@ -150,9 +171,10 @@ public class WorkflowController {
     }
 
     /**
-     * 发布工作流。
-     *
-     * <p>发布操作会将该工作流下其他已发布的版本标记为“DEPRECATED”（废弃），确保生产环境只有一个生效版本。</p>
+     * 发布工作流
+     * <p>
+     * 发布操作会将该工作流下其他已发布的版本标记为 DEPRECATED，
+     * 确保同一时间只有一个生效版本。
      *
      * @param workflowId 工作流唯一标识
      * @param version    待发布的版本号
@@ -173,13 +195,13 @@ public class WorkflowController {
     }
 
     /**
-     * 保存工作流并立即触发编译。
-     *
-     * <p>这是一个组合接口，它会先持久化 DSL 定义，然后调用编译器生成扁平化的 ExecutionPlan，
-     * 方便前端在保存后立即验证工作流逻辑的正确性。</p>
+     * 保存并编译工作流
+     * <p>
+     * 组合接口：先持久化 DSL 定义，再编译生成扁平化的 ExecutionPlan。
+     * 用于前端在保存后立即验证工作流逻辑的正确性。
      *
      * @param request 包含 DSL 对象和编译人信息的请求体
-     * @return 包含保存后的 DSL 实体和生成的执行计划实体的映射
+     * @return 包含 DSL 实体和执行计划实体的映射
      */
     @PostMapping("/save-and-compile")
     public ResponseEntity<Map<String, Object>> saveAndCompile(@RequestBody SaveAndCompileRequest request) {

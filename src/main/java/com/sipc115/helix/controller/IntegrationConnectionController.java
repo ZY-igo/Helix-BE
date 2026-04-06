@@ -14,11 +14,24 @@ import java.util.Map;
 
 /**
  * 集成连接管理控制器
+ * <p>
+ * 提供外部服务集成连接（如飞书、LLM、数据库等）的增删改查及测试接口。
  *
- * <p>提供外部服务集成连接（如飞书、LLM、数据库等）的增删改查及测试接口。</p>
+ * <h3>主要功能：</h3>
+ * <ul>
+ *   <li>POST /api/connections - 创建连接</li>
+ *   <li>PUT /api/connections/{id} - 更新连接配置</li>
+ *   <li>DELETE /api/connections/{id} - 删除连接</li>
+ *   <li>GET /api/connections - 获取所有连接列表</li>
+ *   <li>GET /api/connections/{id} - 获取单个连接详情</li>
+ *   <li>GET /api/connections/by-type/{type} - 按类型获取连接</li>
+ *   <li>POST /api/connections/{id}/test - 测试连接可用性</li>
+ *   <li>GET /api/connections/supported-types - 获取支持的连接类型</li>
+ * </ul>
  *
  * @author Helix Team
  * @since 2.0.0
+ * @see IntegrationConnectionService
  */
 @RestController
 @RequestMapping("/api/connections")
@@ -33,7 +46,10 @@ public class IntegrationConnectionController {
     }
 
     /**
-     * 创建新的集成连接
+     * 创建集成连接
+     *
+     * @param request 包含连接名称、类型和配置的请求体
+     * @return 创建的连接实体
      */
     @PostMapping
     public ResponseEntity<IntegrationConnection> createConnection(@RequestBody CreateConnectionRequest request) {
@@ -48,6 +64,10 @@ public class IntegrationConnectionController {
 
     /**
      * 更新集成连接配置
+     *
+     * @param id      连接 ID
+     * @param request 包含连接名称和配置的请求体
+     * @return 更新后的连接实体
      */
     @PutMapping("/{id}")
     public ResponseEntity<IntegrationConnection> updateConnection(
@@ -64,6 +84,9 @@ public class IntegrationConnectionController {
 
     /**
      * 删除集成连接
+     *
+     * @param id 连接 ID
+     * @return 空响应
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteConnection(@PathVariable Long id) {
@@ -74,6 +97,8 @@ public class IntegrationConnectionController {
 
     /**
      * 获取所有集成连接列表
+     *
+     * @return 连接实体列表
      */
     @GetMapping
     public ResponseEntity<List<IntegrationConnection>> getAllConnections() {
@@ -83,6 +108,9 @@ public class IntegrationConnectionController {
 
     /**
      * 获取单个集成连接详情
+     *
+     * @param id 连接 ID
+     * @return 连接实体
      */
     @GetMapping("/{id}")
     public ResponseEntity<IntegrationConnection> getConnection(@PathVariable Long id) {
@@ -91,7 +119,10 @@ public class IntegrationConnectionController {
     }
 
     /**
-     * 根据类型获取连接列表 (例如: /api/connections/by-type/FEISHU)
+     * 按类型获取连接列表
+     *
+     * @param type 连接类型（如 FEISHU、LLM）
+     * @return 连接实体列表
      */
     @GetMapping("/by-type/{type}")
     public ResponseEntity<List<IntegrationConnection>> getConnectionsByType(@PathVariable String type) {
@@ -101,6 +132,9 @@ public class IntegrationConnectionController {
 
     /**
      * 测试连接可用性
+     *
+     * @param id 连接 ID
+     * @return 测试结果，包含 success 和 message 字段
      */
     @PostMapping("/{id}/test")
     public ResponseEntity<Map<String, Object>> testConnection(@PathVariable Long id) {
@@ -121,6 +155,8 @@ public class IntegrationConnectionController {
 
     /**
      * 获取系统支持的所有连接类型
+     *
+     * @return 连接类型字符串列表
      */
     @GetMapping("/supported-types")
     public ResponseEntity<List<String>> getSupportedTypes() {

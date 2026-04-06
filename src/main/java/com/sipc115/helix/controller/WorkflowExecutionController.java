@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.*;
  * <ul>
  *   <li>启动接口返回的 executionId 用于后续状态查询</li>
  *   <li>temporalWorkflowId 用于取消操作</li>
- *   <li>workflowVersion 必须指定，否则会报错</li>
+ *   <li>执行计划未找到时会自动编译最新 DSL</li>
  * </ul>
  *
  * @author Helix Team
@@ -50,9 +50,14 @@ public class WorkflowExecutionController {
 
     /**
      * 启动工作流执行
+     * <p>
+     * 自动查找或编译执行计划，然后启动工作流。
+     * 1. 优先查找已发布的执行计划
+     * 2. 如果没有已发布的执行计划，查找最新版本并自动编译保存
+     * 3. 如果没有任何版本，抛出异常
      *
-     * @param workflowId 工作流ID
-     * @param request 包含版本和输入参数的请求体
+     * @param workflowId 工作流 ID
+     * @param request    包含输入参数的请求体
      * @return 执行响应，包含 executionId（用于查询）和 temporalWorkflowId（用于取消）
      */
     @PostMapping("/{workflowId}/execute")
@@ -79,7 +84,7 @@ public class WorkflowExecutionController {
     /**
      * 查询执行状态
      *
-     * @param executionId 数据库中的执行记录ID (Long)
+     * @param executionId 数据库中的执行记录 ID
      * @return 工作流状态视图
      */
     @GetMapping("/executions/{executionId}/status")
