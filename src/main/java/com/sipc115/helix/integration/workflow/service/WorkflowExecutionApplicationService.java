@@ -240,4 +240,21 @@ public class WorkflowExecutionApplicationService {
     public void cancel(String workflowId) {
         WorkflowStub.fromTyped(workflowClient.newWorkflowStub(DslRuntimeWorkflow.class, workflowId)).cancel();
     }
+
+    /**
+     * 向工作流发送人工输入信号
+     * <p>
+     * 用于唤醒处于等待人工输入状态的工作流实例。
+     *
+     * @param workflowId Temporal 工作流 ID
+     * @param payload 包含节点 ID 和用户输入数据的载荷
+     */
+    public void sendHumanSignal(String workflowId, com.sipc115.helix.domain.workflow.HumanSignalPayload payload) {
+        logger.info("发送人工输入信号: workflowId={}, nodeId={}", workflowId, payload.getNodeId());
+
+        DslRuntimeWorkflow workflow = workflowClient.newWorkflowStub(DslRuntimeWorkflow.class, workflowId);
+        workflow.provideHumanInput(payload);
+
+        logger.info("人工输入信号已发送: workflowId={}, nodeId={}", workflowId, payload.getNodeId());
+    }
 }

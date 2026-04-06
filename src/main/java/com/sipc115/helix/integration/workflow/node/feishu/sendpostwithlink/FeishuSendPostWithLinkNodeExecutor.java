@@ -1,14 +1,11 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
-import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
-import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
+import com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink.activity.FeishuSendPostWithLinkActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -18,26 +15,49 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 飞书发送带链接富文本消息节点执行器
+ * <p>
+ * 负责向飞书群聊或个人会话发送带链接的富文本消息。
+ *
+ * <h3>DSL 配置示例：</h3>
+ * <pre>
+ * {
+ *   "type": "FEISHU_SEND_POST_WITH_LINK",
+ *   "config": {
+ *     "connectionId": 123,
+ *     "chatId": "oc_xxxx",
+ *     "title": "请查收",
+ *     "text": "点击下方链接查看详情",
+ *     "url": "https://example.com/page",
+ *     "linkText": "查看详情"
+ *   }
+ * }
+ * </pre>
+ *
+ * <h3>架构说明（使用 Temporal Activity）：</h3>
+ * <p>
+ * 此执行器将 API 调用委托给 Temporal Activity 执行，
+ * 保证 Workflow 的确定性。
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ * @see WorkflowNodeExecutor
+ * @see FeishuSendPostWithLinkActivity
+ */
 @Component
 public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendPostWithLinkNodeExecutor.class);
     private static WorkflowTraceService traceService;
-    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuSendPostWithLinkNodeExecutor.traceService = traceService;
-    }
-
-    @Autowired
-    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
-        FeishuSendPostWithLinkNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -65,32 +85,25 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
         output.put("connectionId", connectionId);
         output.put("chatId", chatId);
         output.put("title", title);
-        output.put("text", text);
-        output.put("url", url);
-        output.put("linkText", linkText);
 
         boolean success = false;
         try {
-            FeishuAuthClient authClient;
+            // 通过 Bridge 获取 Temporal Activity 存根
+            FeishuSendPostWithLinkActivity activity = bridge.activities().getActivity(FeishuSendPostWithLinkActivity.class);
+
             Object cachedConfig = config.get("_connectionConfig");
             if (cachedConfig != null) {
-                authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", cachedConfig);
+                activity.sendPostWithLinkWithConfig(cachedConfig, chatId, title, text, url, linkText);
             } else {
-                authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+                activity.sendPostWithLink(connectionId, chatId, title, text, url, linkText);
             }
-            String token = authClient.getToken();
-            FeishuApiHandler handler = new FeishuApiHandler(
-                    new ObjectMapper(),
-                    RestClient.builder()
-            );
-            handler.sendPostWithLink(token, chatId, title, text, url, linkText);
-            success = true;
 
+            success = true;
             output.put("success", success);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送带链接富文本消息完成: connectionId={}, chatId={}, url={}, success={}", connectionId, chatId, url, success);
+            log.info("发送带链接富文本消息完成: connectionId={}, chatId={}, success={}", connectionId, chatId, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());

@@ -26,7 +26,7 @@ public class WorkflowCompileDomainService {
 
         ExecutionPlan plan = dslCompiler.compile(dsl);
 
-        log.info("Workflow compiled successfully. planId={}, workflowId={}",
+        log.info("Workflow compile successfully. planId={}, workflowId={}",
                 plan.getPlanId(), plan.getWorkflowId());
 
         return plan;

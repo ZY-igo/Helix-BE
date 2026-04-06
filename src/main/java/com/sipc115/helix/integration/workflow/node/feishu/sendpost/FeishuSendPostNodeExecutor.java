@@ -1,14 +1,11 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
-import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
-import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
+import com.sipc115.helix.integration.workflow.node.feishu.sendpost.activity.FeishuSendPostActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -18,27 +15,58 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 飞书发送富文本消息节点执行器
+ * <p>
+ * 负责向飞书群聊或个人会话发送富文本（Post）消息。
+ *
+ * <h3>DSL 配置示例：</h3>
+ * <pre>
+ * {
+ *   "type": "FEISHU_SEND_POST",
+ *   "config": {
+ *     "connectionId": 123,
+ *     "chatId": "oc_xxxx",
+ *     "title": "通知",
+ *     "lines": ["第一行内容", "第二行内容"]
+ *   }
+ * }
+ * </pre>
+ *
+ * <h3>架构说明（使用 Temporal Activity）：</h3>
+ * <p>
+ * 此执行器将 API 调用委托给 Temporal Activity 执行，
+ * 保证 Workflow 的确定性。
+ *
+ * <h3>执行流程：</h3>
+ * <pre>
+ * Temporal Workflow Thread
+ *   └─ FeishuSendPostNodeExecutor.execute()
+ *       └─ bridge.activities().getActivity(FeishuSendPostActivity.class)
+ *           └─ FeishuSendPostActivity.sendPost()  ← 在 Activity Worker 上执行
+ *               └─ FeishuApiHandler.sendPost()    ← 真正的 HTTP 调用
+ * </pre>
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ * @see WorkflowNodeExecutor
+ * @see FeishuSendPostActivity
+ */
 @Component
 public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendPostNodeExecutor.class);
     private static WorkflowTraceService traceService;
-    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuSendPostNodeExecutor.traceService = traceService;
-    }
-
-    @Autowired
-    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
-        FeishuSendPostNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -47,7 +75,6 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
         NodeExecutionTraceEntity trace = startTrace(node, context);
 
@@ -58,7 +85,7 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         }
         String chatId = getStringValue(config, "chatId");
         String title = getStringValue(config, "title");
-        List<String> lines = (List<String>) config.get("lines");
+        List<String> lines = getLinesValue(config, "lines");
 
         Map<String, Object> output = new HashMap<>();
         output.put("action", "sendPost");
@@ -68,17 +95,16 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
         boolean success = false;
         try {
-            FeishuAuthClient authClient;
+            // 通过 Bridge 获取 Temporal Activity 存根
+            FeishuSendPostActivity activity = bridge.activities().getActivity(FeishuSendPostActivity.class);
+
+            String messageId;
             Object cachedConfig = config.get("_connectionConfig");
             if (cachedConfig != null) {
-                authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", cachedConfig);
+                messageId = activity.sendPostWithConfig(cachedConfig, chatId, title, lines);
             } else {
-                authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+                messageId = activity.sendPost(connectionId, chatId, title, lines);
             }
-            String token = authClient.getToken();
-
-            FeishuApiHandler handler = new FeishuApiHandler(new ObjectMapper(), RestClient.builder());
-            String messageId = handler.sendPost(token, chatId, title, lines);
 
             success = messageId != null && !messageId.isEmpty();
             output.put("success", success);
@@ -86,7 +112,7 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送富文本消息完成: connectionId={}, chatId={}, title={}, success={}", connectionId, chatId, title, success);
+            log.info("发送富文本消息完成: connectionId={}, chatId={}, success={}", connectionId, chatId, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -151,5 +177,15 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         if (value == null) return null;
         if (value instanceof Number) return ((Number) value).longValue();
         return Long.parseLong(value.toString());
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getLinesValue(Map<String, Object> config, String key) {
+        Object value = config.get(key);
+        if (value == null) return new ArrayList<>();
+        if (value instanceof List) {
+            return (List<String>) value;
+        }
+        return List.of(value.toString());
     }
 }

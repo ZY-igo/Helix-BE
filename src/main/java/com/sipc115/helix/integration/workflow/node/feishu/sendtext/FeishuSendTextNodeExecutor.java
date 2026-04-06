@@ -1,14 +1,11 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
-import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
-import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
+import com.sipc115.helix.integration.workflow.node.feishu.sendtext.activity.FeishuSendTextActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -18,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -33,58 +29,50 @@ import java.util.Map;
  * {
  *   "type": "FEISHU_SEND_TEXT",
  *   "config": {
- *     "connectionId": 123,          // 飞书连接ID
- *     "chatId": "oc_xxxx",          // 会话ID
- *     "text": "Hello, ${user.name}!" // 消息内容
+ *     "connectionId": 123,
+ *     "chatId": "oc_xxxx",
+ *     "text": "Hello, ${user.name}!"
  *   }
  * }
  * </pre>
  *
- * <h3>架构说明：</h3>
+ * <h3>架构说明（使用 Temporal Activity）：</h3>
  * <p>
- * 采用新架构（扁平化），不依赖 Temporal Activity：
+ * 此执行器将 API 调用委托给 Temporal Activity 执行，
+ * 保证 Workflow 的确定性。
+ *
+ * <h3>执行流程：</h3>
  * <pre>
- * FeishuSendTextNodeExecutor
- *        ↓
- * ConnectionClientRegistry.getOrCreateClientByConnection(connectionId)
- *        ↓
- * FeishuAuthClient.getToken()
- *        ↓
- * FeishuApiHandler.sendText(token, chatId, text)
+ * Temporal Workflow Thread
+ *   └─ FeishuSendTextNodeExecutor.execute()
+ *       └─ bridge.activities().getActivity(FeishuSendTextActivity.class)
+ *           └─ FeishuSendTextActivity.sendText()  ← 在 Activity Worker 上执行
+ *               └─ FeishuApiHandler.sendText()   ← 真正的 HTTP 调用
  * </pre>
  *
  * <h3>与旧架构对比：</h3>
  * <pre>
- * 旧架构：Executor → ActivityFactory → ActivityImpl → FeishuApiHandler
- * 新架构：Executor → FeishuAuthClient → FeishuApiHandler
+ * 旧架构（直接调用 - 违反确定性原则）：
+ *   Executor → FeishuAuthClient → FeishuApiHandler  ❌ HTTP 调用在 Workflow 线程
  *
- * 新架构优势：
- * - 少一层抽象，代码更简洁
- * - 不需要 Activity 注册
- * - 更容易测试和维护
+ * 新架构（Activity 委托 - 正确做法）：
+ *   Executor → FeishuSendTextActivity → FeishuApiHandler  ✅ HTTP 调用在 Activity Worker
  * </pre>
  *
  * @author Helix Team
  * @since 2.0.0
  * @see WorkflowNodeExecutor
- * @see FeishuApiHandler
- * @see FeishuAuthClient
+ * @see FeishuSendTextActivity
  */
 @Component
 public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendTextNodeExecutor.class);
     private static WorkflowTraceService traceService;
-    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuSendTextNodeExecutor.traceService = traceService;
-    }
-
-    @Autowired
-    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
-        FeishuSendTextNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -112,17 +100,19 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
         boolean success = false;
         try {
-            FeishuAuthClient authClient;
+            // 通过 Bridge 获取 Temporal Activity 存根
+            // Activity 调用会在 Activity Worker 上执行，而不是 Workflow 线程
+            FeishuSendTextActivity activity = bridge.activities().getActivity(FeishuSendTextActivity.class);
+
+            String messageId;
             Object cachedConfig = config.get("_connectionConfig");
             if (cachedConfig != null) {
-                authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", cachedConfig);
+                // 使用连接配置调用（避免重复查询）
+                messageId = activity.sendTextWithConfig(cachedConfig, chatId, text);
             } else {
-                authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+                // 使用 connectionId 调用
+                messageId = activity.sendText(connectionId, chatId, text);
             }
-            String token = authClient.getToken();
-
-            FeishuApiHandler handler = new FeishuApiHandler(new ObjectMapper(), RestClient.builder());
-            String messageId = handler.sendText(token, chatId, text);
 
             success = messageId != null && !messageId.isEmpty();
             output.put("success", success);
@@ -146,13 +136,6 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 启动节点追踪
-     * <p>
-     * 如果 traceService 可用，记录节点开始执行的信息。
-     * 追踪信息用于审计和问题排查。
-     *
-     * @param node 节点定义
-     * @param context 执行上下文
-     * @return 追踪记录实体，如果追踪失败返回 null
      */
     private NodeExecutionTraceEntity startTrace(CompiledNode node, ExecutionContext context) {
         if (traceService == null || context.getExecutionId() == null) {
@@ -177,11 +160,6 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 标记节点执行成功
-     * <p>
-     * 将节点执行结果记录到追踪服务。
-     *
-     * @param trace 追踪记录
-     * @param output 节点输出
      */
     private void markNodeSuccess(NodeExecutionTraceEntity trace, Map<String, Object> output) {
         if (traceService != null && trace != null) {
@@ -195,11 +173,6 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
 
     /**
      * 标记节点执行失败
-     * <p>
-     * 将节点失败信息记录到追踪服务。
-     *
-     * @param trace 追踪记录
-     * @param errorMessage 错误信息
      */
     private void markNodeFailed(NodeExecutionTraceEntity trace, String errorMessage) {
         if (traceService != null && trace != null) {

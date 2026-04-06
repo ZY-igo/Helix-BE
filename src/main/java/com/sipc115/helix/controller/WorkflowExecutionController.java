@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.controller;
 
+import com.sipc115.helix.domain.workflow.HumanSignalPayload;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionRequest;
 import com.sipc115.helix.domain.workflow.WorkflowStartResponse;
 import com.sipc115.helix.domain.workflow.WorkflowStateView;
@@ -121,6 +122,34 @@ public class WorkflowExecutionController {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             log.error("取消执行异常: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 向工作流发送人工输入信号
+     * <p>
+     * 用于唤醒处于 HUMAN_INPUT 节点的工作流实例。
+     *
+     * @param workflowId Temporal 工作流 ID（即启动时返回的 temporalWorkflowId）
+     * @param payload 包含节点 ID 和用户输入数据的载荷
+     * @return 操作结果
+     */
+    @PostMapping("/executions/{workflowId}/signal")
+    public ResponseEntity<Void> sendHumanSignal(
+            @PathVariable String workflowId,
+            @RequestBody HumanSignalPayload payload
+    ) {
+        log.info("收到人工输入信号请求: workflowId={}, nodeId={}", workflowId, payload.getNodeId());
+
+        try {
+            workflowExecutionService.sendHumanSignal(workflowId, payload);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            log.error("发送信号参数错误: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            log.error("发送信号异常: workflowId={}, error={}", workflowId, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
     }
