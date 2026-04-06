@@ -2,6 +2,7 @@
 package com.sipc115.helix.config;
 
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.schedules.ScheduleClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,5 +29,10 @@ public class TemporalConfig {
     @Bean
     public WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
         return WorkflowClient.newInstance(serviceStubs);
+    }
+
+    @Bean
+    public ScheduleClient scheduleClient(WorkflowServiceStubs serviceStubs) {
+        return ScheduleClient.newInstance(serviceStubs);
     }
 }

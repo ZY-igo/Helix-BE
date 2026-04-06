@@ -34,7 +34,7 @@ public class FeishuConnectionClient implements ConnectionClient<FeishuAuthClient
     }
 
     @Override
-    public FeishuAuthClient createClient(Object config) throws Exception {
+    public FeishuAuthClient createClient(Object config) {
         Map<String, Object> configMap = toConfigMap(config);
         String appId = getString(configMap, "appId");
         String appSecret = getString(configMap, "appSecret");

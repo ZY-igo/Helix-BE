@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -146,6 +147,50 @@ public class WorkflowPersistenceService {
     public Optional<ExecutionPlan> findExecutionPlanByPlanId(String planId) {
         return planRepository.findByPlanId(planId)
                 .map(this::toDomain);
+    }
+
+    /**
+     * 获取工作流最新已发布的执行计划
+     * <p>
+     * 通过查找最新已发布的 DSL 版本，然后获取对应的执行计划。
+     *
+     * @param workflowId 工作流 ID
+     * @return 最新发布的执行计划（如果不存在返回 Optional.empty()）
+     */
+    @Transactional(readOnly = true)
+    public Optional<ExecutionPlan> findLatestPublishedExecutionPlan(String workflowId) {
+        Optional<WorkflowDslEntity> publishedDsl = dslRepository
+                .findFirstByWorkflowIdAndStatusOrderByCreatedAtDesc(workflowId, "PUBLISHED");
+
+        if (publishedDsl.isEmpty()) {
+            logger.warn("未找到已发布的工作流。workflowId={}", workflowId);
+            return Optional.empty();
+        }
+
+        String version = publishedDsl.get().getVersion();
+        logger.info("找到最新发布的 DSL 版本。workflowId={}, version={}", workflowId, version);
+
+        return findExecutionPlan(workflowId, version);
+    }
+
+    /**
+     * 获取工作流最新版本（不限状态）
+     * <p>
+     * 查找该工作流最新创建的一个版本，不关心其发布状态。
+     *
+     * @param workflowId 工作流 ID
+     * @return 最新版本的 DSL（如果不存在返回 Optional.empty()）
+     */
+    @Transactional(readOnly = true)
+    public Optional<WorkflowDsl> findLatestDsl(String workflowId) {
+        List<WorkflowDslEntity> dsls = dslRepository.findByWorkflowIdOrderByCreatedAtDesc(workflowId);
+        if (dsls.isEmpty()) {
+            logger.warn("未找到任何工作流版本。workflowId={}", workflowId);
+            return Optional.empty();
+        }
+        WorkflowDslEntity latest = dsls.get(0);
+        logger.info("找到最新版本的 DSL。workflowId={}, version={}", workflowId, latest.getVersion());
+        return Optional.of(toDomain(latest));
     }
 
     // =====================================================

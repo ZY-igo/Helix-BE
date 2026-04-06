@@ -2,62 +2,72 @@
 package com.sipc115.helix.integration.workflow.service;
 
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
+import com.sipc115.helix.domain.workflow.ScheduleSpec;
+import com.sipc115.helix.domain.workflow.WorkflowDsl;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionEntity;
 import com.sipc115.helix.domain.workflow.WorkflowExecutionRequest;
 import com.sipc115.helix.domain.workflow.WorkflowStartResponse;
 import com.sipc115.helix.integration.workflow.engine.DslRuntimeWorkflow;
-import com.sipc115.helix.integration.workflow.spi.ExecutionPlanRepository;
 import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
+import io.temporal.client.schedules.ScheduleActionStartWorkflow;
+import io.temporal.client.schedules.ScheduleClient;
+import io.temporal.client.schedules.Schedule;
+import io.temporal.client.schedules.ScheduleIntervalSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class WorkflowExecutionApplicationService {
 
     public static final String TASK_QUEUE = "helix-task-queue";
 
-    private final ExecutionPlanRepository executionPlanRepository;
     private final WorkflowClient workflowClient;
+    private final ScheduleClient scheduleClient;
     private final WorkflowPersistenceService persistenceService;
     private final WorkflowTraceService traceService;
+    private final WorkflowDefinitionApplicationService definitionService;
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowExecutionApplicationService.class);
 
     public WorkflowExecutionApplicationService(
-            ExecutionPlanRepository executionPlanRepository,
             WorkflowClient workflowClient,
+            ScheduleClient scheduleClient,
             WorkflowPersistenceService persistenceService,
-            WorkflowTraceService traceService) {
-        this.executionPlanRepository = executionPlanRepository;
+            WorkflowTraceService traceService,
+            WorkflowDefinitionApplicationService definitionService) {
         this.workflowClient = workflowClient;
+        this.scheduleClient = scheduleClient;
         this.persistenceService = persistenceService;
         this.traceService = traceService;
+        this.definitionService = definitionService;
     }
 
     /**
      * 启动工作流执行
-     *
-     * @param request 工作流执行请求
-     * @return 包含 executionId 和 temporalWorkflowId 的响应
+     * <p>
+     * 自动查找或编译执行计划，然后启动工作流。
+     * 1. 优先查找已发布的执行计划
+     * 2. 如果没有已发布的执行计划，查找最新版本并自动编译保存
+     * 3. 如果没有任何版本，抛出异常
      */
     public WorkflowStartResponse start(WorkflowExecutionRequest request) {
-        ExecutionPlan plan = loadExecutionPlan(request.getWorkflowId(), request.getWorkflowVersion())
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Execution plan not found: workflowId=" + request.getWorkflowId() +
-                ", version=" + request.getWorkflowVersion()));
+        ExecutionPlan plan = findOrCompileExecutionPlan(request.getWorkflowId());
 
-        String temporalWorkflowId = request.getWorkflowId() + "-v" + request.getWorkflowVersion() + "-" + System.currentTimeMillis();
+        String temporalWorkflowId = request.getWorkflowId() + "-v" + plan.getWorkflowVersion() + "-" + System.currentTimeMillis();
 
         WorkflowExecutionEntity execution = traceService.startExecution(
             request.getWorkflowId(),
-            request.getWorkflowVersion(),
+            plan.getWorkflowVersion(),
             request.getInput(),
             null
         );
@@ -84,15 +94,120 @@ public class WorkflowExecutionApplicationService {
         return response;
     }
 
-    private java.util.Optional<ExecutionPlan> loadExecutionPlan(String workflowId, String version) {
-        java.util.Optional<ExecutionPlan> dbPlan = persistenceService.findExecutionPlan(workflowId, version);
-        if (dbPlan.isPresent()) {
-            logger.info("从数据库加载执行计划。workflowId={}, version={}", workflowId, version);
-            return dbPlan;
+    /**
+     * 运行工作流调度
+     * <p>
+     * 自动查找或编译执行计划，然后创建 Temporal Schedule。
+     * 1. 优先查找已发布的执行计划
+     * 2. 如果没有已发布的执行计划，查找最新版本并自动编译保存
+     * 3. 如果没有任何版本，抛出异常
+     * scheduleId 格式: {workflowId}
+     */
+    public String runWorkflow(String workflowId) {
+        ExecutionPlan plan = findOrCompileExecutionPlan(workflowId);
+
+        ScheduleSpec dslSchedule = plan.getSchedule();
+        if (dslSchedule == null || !Boolean.TRUE.equals(dslSchedule.getEnabled())) {
+            throw new IllegalStateException("Workflow does not have an enabled schedule. workflowId=" + workflowId);
         }
 
-        logger.warn("数据库未找到，回退到内存仓库。workflowId={}, version={}", workflowId, version);
-        return executionPlanRepository.findByWorkflowIdAndVersion(workflowId, version);
+        String version = plan.getWorkflowVersion();
+        String temporalWorkflowId = workflowId + "-scheduled-" + version + "-" + System.currentTimeMillis();
+
+        WorkflowOptions workflowOptions = WorkflowOptions.newBuilder()
+            .setTaskQueue(TASK_QUEUE)
+            .setWorkflowId(temporalWorkflowId)
+            .build();
+
+        ScheduleActionStartWorkflow action =
+            ScheduleActionStartWorkflow.newBuilder()
+                .setWorkflowType(DslRuntimeWorkflow.class)
+                .setArguments(plan, new HashMap<>())
+                .setOptions(workflowOptions)
+                .build();
+
+        io.temporal.client.schedules.ScheduleSpec.Builder specBuilder =
+            io.temporal.client.schedules.ScheduleSpec.newBuilder();
+
+        if (dslSchedule.getCron() != null && !dslSchedule.getCron().isEmpty()) {
+            specBuilder.setIntervals(Collections.singletonList(
+                new ScheduleIntervalSpec(Duration.ofMinutes(1))));
+            if (dslSchedule.getTimezone() != null && !dslSchedule.getTimezone().isEmpty()) {
+                specBuilder.setTimeZoneName(dslSchedule.getTimezone());
+            }
+        } else if (dslSchedule.getIntervalMs() != null && dslSchedule.getIntervalMs() > 0) {
+            specBuilder.setIntervals(Collections.singletonList(
+                new ScheduleIntervalSpec(Duration.ofMillis(dslSchedule.getIntervalMs()))));
+        } else {
+            throw new IllegalArgumentException("Schedule must have either cron or intervalMs configured");
+        }
+
+        Schedule schedule = Schedule.newBuilder()
+            .setAction(action)
+            .setSpec(specBuilder.build())
+            .build();
+
+        scheduleClient.createSchedule(workflowId, schedule, null);
+        logger.info("调度创建成功: scheduleId={}, cron={}, intervalMs={}",
+                workflowId, dslSchedule.getCron(), dslSchedule.getIntervalMs());
+        return workflowId;
+    }
+
+    /**
+     * 查找或编译执行计划
+     * <p>
+     * 1. 优先返回已发布的执行计划
+     * 2. 如果没有已发布的执行计划，查找最新版本的 DSL 并自动编译保存
+     * 3. 如果没有任何版本，抛出异常
+     */
+    private ExecutionPlan findOrCompileExecutionPlan(String workflowId) {
+        Optional<ExecutionPlan> publishedPlan = persistenceService.findLatestPublishedExecutionPlan(workflowId);
+        if (publishedPlan.isPresent()) {
+            logger.info("使用已发布的执行计划。workflowId={}, version={}",
+                    workflowId, publishedPlan.get().getWorkflowVersion());
+            return publishedPlan.get();
+        }
+
+        logger.info("未找到已发布的执行计划，尝试查找最新版本并自动编译。workflowId={}", workflowId);
+
+        Optional<WorkflowDsl> latestDsl = persistenceService.findLatestDsl(workflowId);
+        if (latestDsl.isEmpty()) {
+            throw new IllegalArgumentException("No workflow found for workflowId: " + workflowId);
+        }
+
+        WorkflowDsl dsl = latestDsl.get();
+        logger.info("找到最新 DSL 版本，正在编译。workflowId={}, version={}",
+                workflowId, dsl.getVersion());
+
+        ExecutionPlan compiledPlan = definitionService.saveAndCompile(dsl);
+        logger.info("自动编译完成。workflowId={}, version={}, planId={}",
+                workflowId, dsl.getVersion(), compiledPlan.getPlanId());
+
+        return compiledPlan;
+    }
+
+    /**
+     * 暂停调度
+     */
+    public void pauseSchedule(String scheduleId) {
+        scheduleClient.getHandle(scheduleId).pause();
+        logger.info("调度已暂停: scheduleId={}", scheduleId);
+    }
+
+    /**
+     * 恢复调度
+     */
+    public void resumeSchedule(String scheduleId) {
+        scheduleClient.getHandle(scheduleId).unpause();
+        logger.info("调度已恢复: scheduleId={}", scheduleId);
+    }
+
+    /**
+     * 删除调度
+     */
+    public void deleteSchedule(String scheduleId) {
+        scheduleClient.getHandle(scheduleId).delete();
+        logger.info("调度已删除: scheduleId={}", scheduleId);
     }
 
     public void cancel(String workflowId) {
