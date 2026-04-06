@@ -53,6 +53,26 @@ public class WorkflowDslEntity {
     private String status;
 
     /**
+     * 工作流状态
+     * <p>
+     * 可选值：
+     * - INITIALIZING: 初始化
+     * - COMPILING: 编译中
+     * - COMPILE_FAILED: 编译失败
+     * - COMPILED: 编译成功
+     * - RUNNING: 运行中
+     * - STOPPED: 已停用
+     */
+    @Column(name = "state", length = 20)
+    private String state;
+
+    /**
+     * 状态详情（用于存储编译失败原因等）
+     */
+    @Column(name = "state_detail", length = 500)
+    private String stateDetail;
+
+    /**
      * 元数据（可选）
      */
     @Column(name = "metadata", columnDefinition = "jsonb")

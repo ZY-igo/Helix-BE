@@ -148,6 +148,18 @@ public class WorkflowExecutionApplicationService {
             .build();
 
         scheduleClient.createSchedule(workflowId, schedule, null);
+
+        try {
+            persistenceService.updateDslState(
+                workflowId,
+                version,
+                com.sipc115.helix.domain.workflow.WorkflowState.RUNNING.name(),
+                null
+            );
+        } catch (Exception e) {
+            logger.warn("更新运行状态失败，继续流程。workflowId={}, version={}", workflowId, version);
+        }
+
         logger.info("调度创建成功: scheduleId={}, cron={}, intervalMs={}",
                 workflowId, dslSchedule.getCron(), dslSchedule.getIntervalMs());
         return workflowId;
@@ -207,6 +219,21 @@ public class WorkflowExecutionApplicationService {
      */
     public void deleteSchedule(String scheduleId) {
         scheduleClient.getHandle(scheduleId).delete();
+
+        try {
+            String runningVersion = persistenceService.findRunningVersion(scheduleId);
+            if (runningVersion != null) {
+                persistenceService.updateDslState(
+                    scheduleId,
+                    runningVersion,
+                    com.sipc115.helix.domain.workflow.WorkflowState.STOPPED.name(),
+                    null
+                );
+            }
+        } catch (Exception e) {
+            logger.warn("更新停用状态失败，继续流程。scheduleId={}", scheduleId);
+        }
+
         logger.info("调度已删除: scheduleId={}", scheduleId);
     }
 

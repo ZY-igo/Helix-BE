@@ -30,6 +30,11 @@ public interface JpaWorkflowDslRepository extends JpaRepository<WorkflowDslEntit
     List<WorkflowDslEntity> findByWorkflowIdOrderByCreatedAtDesc(String workflowId);
 
     /**
+     * 查询工作流的所有版本（按更新时间倒序）
+     */
+    List<WorkflowDslEntity> findByWorkflowIdOrderByUpdatedAtDesc(String workflowId);
+
+    /**
      * 查询工作流最新发布的版本
      */
     Optional<WorkflowDslEntity> findFirstByWorkflowIdAndStatusOrderByCreatedAtDesc(String workflowId, String status);

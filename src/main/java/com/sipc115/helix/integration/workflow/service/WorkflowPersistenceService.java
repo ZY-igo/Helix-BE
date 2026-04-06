@@ -55,16 +55,29 @@ public class WorkflowPersistenceService {
     @Transactional
     public WorkflowDsl saveDsl(WorkflowDsl dsl) {
         try {
-            WorkflowDslEntity entity = new WorkflowDslEntity();
-            entity.setWorkflowId(dsl.getWorkflowId());
-            entity.setVersion(dsl.getVersion());
-            entity.setDslContent(objectMapper.writeValueAsString(dsl));
-            entity.setStatus("PUBLISHED");
-            entity.setMetadata(objectMapper.writeValueAsString(dsl.getMetadata()));
-            entity.setCreatedAt(Instant.now());
-            entity.setUpdatedAt(Instant.now());
-            entity.setCreatedBy("system");
-            entity.setUpdatedBy("system");
+            // 先查询是否存在，存在则只更新内容，不存在则新建
+            Optional<WorkflowDslEntity> existingOpt = dslRepository.findByWorkflowIdAndVersion(dsl.getWorkflowId(), dsl.getVersion());
+            WorkflowDslEntity entity;
+            
+            if (existingOpt.isPresent()) {
+                entity = existingOpt.get();
+                entity.setDslContent(objectMapper.writeValueAsString(dsl));
+                entity.setMetadata(objectMapper.writeValueAsString(dsl.getMetadata()));
+                entity.setUpdatedAt(Instant.now());
+                // 保持原有状态不变，除非显式调用 updateDslState
+            } else {
+                entity = new WorkflowDslEntity();
+                entity.setWorkflowId(dsl.getWorkflowId());
+                entity.setVersion(dsl.getVersion());
+                entity.setDslContent(objectMapper.writeValueAsString(dsl));
+                entity.setStatus("PUBLISHED");
+                entity.setMetadata(objectMapper.writeValueAsString(dsl.getMetadata()));
+                entity.setState(com.sipc115.helix.domain.workflow.WorkflowState.INITIALIZING.name());
+                entity.setCreatedAt(Instant.now());
+                entity.setUpdatedAt(Instant.now());
+                entity.setCreatedBy("system");
+                entity.setUpdatedBy("system");
+            }
 
             WorkflowDslEntity saved = dslRepository.save(entity);
             logger.info("✅ DSL 已保存到数据库。workflowId={}, version={}",
@@ -191,6 +204,96 @@ public class WorkflowPersistenceService {
         WorkflowDslEntity latest = dsls.get(0);
         logger.info("找到最新版本的 DSL。workflowId={}, version={}", workflowId, latest.getVersion());
         return Optional.of(toDomain(latest));
+    }
+
+    /**
+     * 更新工作流版本状态
+     *
+     * @param workflowId 工作流 ID
+     * @param version 版本号
+     * @param state 新状态
+     * @param stateDetail 状态详情（可选）
+     */
+    @Transactional
+    public void updateDslState(String workflowId, String version, String state, String stateDetail) {
+        Optional<WorkflowDslEntity> entityOpt = dslRepository.findByWorkflowIdAndVersion(workflowId, version);
+        if (entityOpt.isEmpty()) {
+            logger.warn("无法更新状态，未找到工作流。workflowId={}, version={}", workflowId, version);
+            return;
+        }
+        WorkflowDslEntity entity = entityOpt.get();
+        entity.setState(state);
+        entity.setStateDetail(stateDetail);
+        entity.setUpdatedAt(Instant.now());
+        dslRepository.save(entity);
+        logger.info("工作流状态已更新。workflowId={}, version={}, state={}", workflowId, version, state);
+    }
+
+    /**
+     * 获取工作流版本的当前状态
+     *
+     * @param workflowId 工作流 ID
+     * @param version 版本号
+     * @return 状态值（如果不存在返回 null）
+     */
+    @Transactional(readOnly = true)
+    public String getDslState(String workflowId, String version) {
+        Optional<WorkflowDslEntity> entityOpt = dslRepository.findByWorkflowIdAndVersion(workflowId, version);
+        return entityOpt.map(WorkflowDslEntity::getState).orElse(null);
+    }
+
+    /**
+     * 获取工作流版本的最新版本（状态为 RUNNING）
+     * <p>
+     * 由于 scheduleId = workflowId（不含版本），同一时间只有一个版本处于 RUNNING 状态。
+     * 该方法查找创建时间最新的 RUNNING 版本。
+     *
+     * @param workflowId 工作流 ID
+     * @return 状态为 RUNNING 的版本号（如果不存在返回 null）
+     */
+    @Transactional(readOnly = true)
+    public String findRunningVersion(String workflowId) {
+        List<WorkflowDslEntity> dsls = dslRepository.findByWorkflowIdOrderByCreatedAtDesc(workflowId);
+        for (WorkflowDslEntity entity : dsls) {
+            if (com.sipc115.helix.domain.workflow.WorkflowState.RUNNING.name().equals(entity.getState())) {
+                logger.info("找到运行中的工作流版本。workflowId={}, version={}", workflowId, entity.getVersion());
+                return entity.getVersion();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取工作流版本的最新版本（状态为 RUNNING），按更新时间排序
+     * <p>
+     * 适用于更精确地查找最近一次被设置为 RUNNING 的版本。
+     *
+     * @param workflowId 工作流 ID
+     * @return 状态为 RUNNING 的版本号（如果不存在返回 null）
+     */
+    @Transactional(readOnly = true)
+    public String findRunningVersionByUpdatedAt(String workflowId) {
+        List<WorkflowDslEntity> dsls = dslRepository.findByWorkflowIdOrderByUpdatedAtDesc(workflowId);
+        for (WorkflowDslEntity entity : dsls) {
+            if (com.sipc115.helix.domain.workflow.WorkflowState.RUNNING.name().equals(entity.getState())) {
+                logger.info("找到运行中的工作流版本（按更新时间）。workflowId={}, version={}", workflowId, entity.getVersion());
+                return entity.getVersion();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取工作流版本的状态详情
+     *
+     * @param workflowId 工作流 ID
+     * @param version 版本号
+     * @return 状态详情（如果不存在返回 null）
+     */
+    @Transactional(readOnly = true)
+    public String getDslStateDetail(String workflowId, String version) {
+        Optional<WorkflowDslEntity> entityOpt = dslRepository.findByWorkflowIdAndVersion(workflowId, version);
+        return entityOpt.map(WorkflowDslEntity::getStateDetail).orElse(null);
     }
 
     // =====================================================

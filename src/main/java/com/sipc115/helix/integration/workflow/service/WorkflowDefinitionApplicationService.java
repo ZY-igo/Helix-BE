@@ -56,30 +56,55 @@ public class WorkflowDefinitionApplicationService {
      * 保存并编译工作流 DSL
      * <p>
      * 将工作流 DSL 保存到存储库，然后编译为执行计划，并将执行计划保存到存储库。
+     * 编译结果状态（COMPILED/COMPILE_FAILED）会在编译完成后更新。
      *
      * @param dsl 工作流 DSL 对象
      * @return 编译后的执行计划
      */
     public ExecutionPlan saveAndCompile(WorkflowDsl dsl) {
-        // ① 保存 DSL 到内存仓库（保持向后兼容）
-        dslRepository.save(dsl);
+        String workflowId = dsl.getWorkflowId();
+        String version = dsl.getVersion();
 
-        // ② 编译 DSL 为执行计划
-        ExecutionPlan plan = dslCompiler.compile(dsl);
+        try {
+            dslRepository.save(dsl);
 
-        // ⭐ ③ 生成 planId（如果编译器没有生成）
-        if (plan.getPlanId() == null || plan.getPlanId().isEmpty()) {
-            String planId = dsl.getWorkflowId() + "-v" + dsl.getVersion() + "-" + System.currentTimeMillis();
-            plan.setPlanId(planId);
+            ExecutionPlan plan = dslCompiler.compile(dsl);
+
+            if (plan.getPlanId() == null || plan.getPlanId().isEmpty()) {
+                String planId = workflowId + "-v" + version + "-" + System.currentTimeMillis();
+                plan.setPlanId(planId);
+            }
+
+            executionPlanRepository.save(plan);
+
+            persistToDatabase(dsl, plan);
+
+            try {
+                persistenceService.updateDslState(
+                    workflowId,
+                    version,
+                    com.sipc115.helix.domain.workflow.WorkflowState.COMPILED.name(),
+                    null
+                );
+            } catch (Exception e) {
+                logger.warn("更新编译成功状态失败，继续流程。workflowId={}, version={}", workflowId, version);
+            }
+
+            return plan;
+        } catch (Exception e) {
+            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            try {
+                persistenceService.updateDslState(
+                    workflowId,
+                    version,
+                    com.sipc115.helix.domain.workflow.WorkflowState.COMPILE_FAILED.name(),
+                    errorMsg
+                );
+            } catch (Exception ex) {
+                logger.warn("更新编译失败状态失败。workflowId={}, version={}", workflowId, version);
+            }
+            throw e;
         }
-
-        // ④ 保存执行计划到内存仓库（保持向后兼容）
-        executionPlanRepository.save(plan);
-
-        // ⭐ ⑤ 【新增】持久化到数据库（解耦的核心逻辑）
-        persistToDatabase(dsl, plan);
-
-        return plan;
     }
 
     /**
