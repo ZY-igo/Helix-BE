@@ -1,14 +1,11 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.publishclouddoc;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
-import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
-import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
-import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
+import com.sipc115.helix.integration.workflow.node.feishu.publishclouddoc.activity.FeishuPublishCloudDocActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
@@ -18,26 +15,46 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 飞书发布云文档节点执行器
+ * <p>
+ * 负责在飞书云空间中创建并发布云文档。
+ *
+ * <h3>DSL 配置示例：</h3>
+ * <pre>
+ * {
+ *   "type": "FEISHU_PUBLISH_CLOUD_DOC",
+ *   "config": {
+ *     "connectionId": 123,
+ *     "title": "每日报告",
+ *     "content": "报告内容..."
+ *   }
+ * }
+ * </pre>
+ *
+ * <h3>架构说明（使用 Temporal Activity）：</h3>
+ * <p>
+ * 此执行器将 API 调用委托给 Temporal Activity 执行，
+ * 保证 Workflow 的确定性。
+ *
+ * @author Helix Team
+ * @since 2.0.0
+ * @see WorkflowNodeExecutor
+ * @see FeishuPublishCloudDocActivity
+ */
 @Component
 public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuPublishCloudDocNodeExecutor.class);
     private static WorkflowTraceService traceService;
-    private static ConnectionClientRegistry connectionRegistry;
 
     @Autowired
     public void setTraceService(WorkflowTraceService traceService) {
         FeishuPublishCloudDocNodeExecutor.traceService = traceService;
-    }
-
-    @Autowired
-    public void setConnectionRegistry(ConnectionClientRegistry connectionRegistry) {
-        FeishuPublishCloudDocNodeExecutor.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -61,31 +78,27 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
         output.put("action", "publishCloudDoc");
         output.put("connectionId", connectionId);
         output.put("title", title);
-        output.put("contentLength", content != null ? content.length() : 0);
 
-        String cloudDocUrl = null;
+        boolean success = false;
         try {
-            FeishuAuthClient authClient;
+            // 通过 Bridge 获取 Temporal Activity 存根
+            FeishuPublishCloudDocActivity activity = bridge.activities().getActivity(FeishuPublishCloudDocActivity.class);
+
+            String docUrl;
             Object cachedConfig = config.get("_connectionConfig");
             if (cachedConfig != null) {
-                authClient = connectionRegistry.getOrCreateClient(connectionId, "FEISHU", cachedConfig);
+                docUrl = activity.publishCloudDocWithConfig(cachedConfig, title, content);
             } else {
-                authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
+                docUrl = activity.publishCloudDoc(connectionId, title, content);
             }
-            String token = authClient.getToken();
-            FeishuApiHandler handler = new FeishuApiHandler(
-                    new ObjectMapper(),
-                    RestClient.builder()
-            );
-            cloudDocUrl = handler.createDocument(token, title, null);
 
-            output.put("success", cloudDocUrl != null);
-            output.put("result", cloudDocUrl);
-            output.put("cloudDocUrl", cloudDocUrl);
+            success = docUrl != null && !docUrl.isEmpty();
+            output.put("success", success);
+            output.put("docUrl", docUrl);
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发布云文档完成: connectionId={}, title={}, url={}", connectionId, title, cloudDocUrl);
+            log.info("发布云文档完成: connectionId={}, title={}, success={}", connectionId, title, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -94,7 +107,7 @@ public class FeishuPublishCloudDocNodeExecutor implements WorkflowNodeExecutor {
         }
 
         NodeExecutionResult result = NodeExecutionResult.completed();
-        result.setBranchKey(cloudDocUrl != null ? "success" : "failure");
+        result.setBranchKey(success ? "success" : "failure");
         result.setOutput(output);
         return result;
     }

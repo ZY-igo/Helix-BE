@@ -3,6 +3,9 @@ package com.sipc115.helix.domain.workflow;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Instant;
 import java.util.Map;
 
@@ -50,47 +53,14 @@ import java.util.Map;
  * @author Helix Team
  * @since 2.0.0
  * @see WorkflowExecutionEntity
- * @see WorkflowTraceService
  */
 @Data
 @Entity
 @Table(name = "node_execution_trace", indexes = {
-    /**
-     * 按工作流执行ID和节点ID建立索引
-     * <p>
-     * 用于快速查找某个工作流执行中的特定节点的追踪记录。
-     * 查询场景：SELECT * FROM node_execution_trace WHERE executionId = ? AND nodeId = ?
-     */
     @Index(name = "idx_exec_id_node_id", columnList = "executionId, nodeId"),
-
-    /**
-     * 按工作流执行ID和执行顺序建立索引
-     * <p>
-     * 用于按执行顺序查看某个工作流的所有节点执行记录。
-     * 查询场景：SELECT * FROM node_execution_trace WHERE executionId = ? ORDER BY executionOrder
-     */
     @Index(name = "idx_exec_order", columnList = "executionId, executionOrder"),
-
-    /**
-     * 幂等键唯一索引
-     * <p>
-     * 用于防止 Activity 重复执行。
-     * attemptId 格式：{executionId}_{nodeId}_{retryCount}
-     */
     @Index(name = "idx_attempt_id", columnList = "attemptId", unique = true)
 }, uniqueConstraints = {
-    /**
-     * 工作流执行ID、节点ID和重试次数的唯一约束
-     * <p>
-     * 组合唯一键，确保：
-     * 1. 同一个节点在同一重试次数下只有一条记录
-     * 2. 不同重试次数的记录可以共存
-     *
-     * 例如：
-     * - (12345, "sendNotify", 0) ✓ 唯一
-     * - (12345, "sendNotify", 1) ✓ 唯一（重试一次）
-     * - (12345, "sendNotify", 0) ✗ 违反唯一约束
-     */
     @UniqueConstraint(name = "uk_exec_node_retry", columnNames = {"executionId", "nodeId", "retryCount"})
 })
 public class NodeExecutionTraceEntity {
@@ -264,8 +234,7 @@ public class NodeExecutionTraceEntity {
     /**
      * 输入数据（JSON 格式）
      * <p>
-     * 记录节点执行时的输入参数。
-     * 以 JSON 字符串形式存储在数据库的 TEXT 类型的列中。
+     * 记录节点执行时的输入参数，存储为 JSONB 格式。
      *
      * <h3>内容示例：</h3>
      * <pre>
@@ -284,14 +253,13 @@ public class NodeExecutionTraceEntity {
      *   <li>重试依据：重试时使用相同的输入</li>
      * </ul>
      */
-    @Column(columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> input;
 
     /**
      * 输出数据（JSON 格式）
      * <p>
-     * 记录节点执行成功后的输出结果。
-     * 以 JSON 字符串形式存储在数据库的 TEXT 类型的列中。
+     * 记录节点执行成功后的输出结果，存储为 JSONB 格式。
      *
      * <h3>内容示例（飞书发消息节点）：</h3>
      * <pre>
@@ -309,7 +277,7 @@ public class NodeExecutionTraceEntity {
      *   <li>审计追踪：记录业务操作结果</li>
      * </ul>
      */
-    @Column(columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> output;
 
     /**
@@ -415,10 +383,9 @@ public class NodeExecutionTraceEntity {
     private String attemptId;
 
     /**
-     * 元数据
+     * 元数据（JSON 格式）
      * <p>
-     * 用于存储特定节点的额外信息。
-     * 以 JSON 格式存储，可以保存任意键值对。
+     * 用于存储特定节点的额外信息，存储为 JSONB 格式。
      *
      * <h3>使用示例：</h3>
      * <pre>
@@ -436,7 +403,7 @@ public class NodeExecutionTraceEntity {
      *   <li>特定业务场景的定制化数据</li>
      * </ul>
      */
-    @Column(columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> metadata;
 
     /**
@@ -469,8 +436,6 @@ public class NodeExecutionTraceEntity {
      */
     @PrePersist
     protected void onCreate() {
-        // 使用 Instant.now() 获取当前 UTC 时间
-        // 这是 JPA 的回调方法，不要手动调用
         createdAt = Instant.now();
     }
 }
