@@ -1,7 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.agent.chat;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionStatus;
@@ -46,12 +48,19 @@ import java.util.Map;
  * 此执行器将 API 调用委托给 Temporal Activity 执行，
  * 保证 Workflow 的确定性。
  *
+ * <h3>幂等性保护：</h3>
+ * <p>
+ * 通过传递 executionId、nodeId、retryCount 给 Activity，
+ * Activity 可以实现幂等性检查，避免 Temporal 重试导致重复调用 LLM API。
+ * 由于 LLM API 通常费用较高，幂等性保护尤为重要。
+ *
  * <h3>执行流程：</h3>
  * <pre>
  * Temporal Workflow Thread
  *   └─ AiChatNodeExecutor.execute()
  *       └─ bridge.activities().getActivity(AiChatActivity.class)
- *           └─ AiChatActivity.chat()  ← 在 Activity Worker 上执行
+ *           └─ AiChatActivity.chat()
+ *               └─ 幂等性检查
  *               └─ LlmAuthClient.chat()   ← 真正的 HTTP 调用
  * </pre>
  *
@@ -109,7 +118,8 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
                         node.getType().name(),
                         NodeRoleConstants.NORMAL,
                         context.getExecutionOrder(),
-                        context.getVariables()
+                        context.getVariables(),
+                        0
                 );
                 context.setCurrentNodeTraceId(trace.getId());
             } catch (Exception e) {
@@ -140,29 +150,30 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
             log.info("执行 AI 聊天节点: {}, connectionId: {}", node.getId(), connectionId);
 
-            // 通过 Bridge 获取 Temporal Activity 存根
-            // Activity 调用会在 Activity Worker 上执行，而不是 Workflow 线程
             AiChatActivity activity = bridge.activities().getActivity(AiChatActivity.class);
 
+            Long executionId = context.getExecutionId();
+            String nodeId = node.getId();
+
             String response;
-            Object cachedConfig = config.get("_connectionConfig");
+            Object cachedConfig = config.get(WorkflowConstants.CONNECTION_CONFIG_KEY);
             if (cachedConfig != null) {
-                // 使用连接配置调用（避免重复查询）
-                response = activity.chatWithConfig(cachedConfig, systemPrompt, userPrompt, temperature, maxTokens, thinking);
+                response = activity.chatWithConfig(
+                    executionId, 0, nodeId,
+                    cachedConfig, systemPrompt, userPrompt, temperature, maxTokens, thinking);
             } else {
-                // 使用 connectionId 调用
-                response = activity.chat(connectionId, systemPrompt, userPrompt, temperature, maxTokens, thinking);
+                response = activity.chat(
+                    executionId, 0, nodeId,
+                    connectionId, systemPrompt, userPrompt, temperature, maxTokens, thinking);
             }
 
-            // 从 Activity 返回结果中获取 model 信息
-            // 注意：Activity 直接返回的是 response 字符串，model 信息需要从别处获取
-            // 这里暂时使用配置中的默认值
             String model = getStringValue(config.get("model"), "unknown");
 
             Map<String, Object> output = new HashMap<>();
             output.put("action", "aiChat");
             output.put("connectionId", connectionId);
             output.put("model", model);
+            output.put("response", response);
             output.put(outputVar, response);
             output.put("status", "success");
             output.put("timestamp", System.currentTimeMillis());

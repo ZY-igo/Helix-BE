@@ -1,7 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -44,12 +46,18 @@ import java.util.Map;
  * 此执行器将 API 调用委托给 Temporal Activity 执行，
  * 保证 Workflow 的确定性。
  *
+ * <h3>幂等性保护：</h3>
+ * <p>
+ * 通过传递 executionId、nodeId、retryCount 给 Activity，
+ * Activity 可以实现幂等性检查，避免 Temporal 重试导致重复发送消息。
+ *
  * <h3>执行流程：</h3>
  * <pre>
  * Temporal Workflow Thread
  *   └─ FeishuSendPostNodeExecutor.execute()
  *       └─ bridge.activities().getActivity(FeishuSendPostActivity.class)
- *           └─ FeishuSendPostActivity.sendPost()  ← 在 Activity Worker 上执行
+ *           └─ FeishuSendPostActivity.sendPost()
+ *               └─ 幂等性检查
  *               └─ FeishuApiHandler.sendPost()    ← 真正的 HTTP 调用
  * </pre>
  *
@@ -95,15 +103,21 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
         boolean success = false;
         try {
-            // 通过 Bridge 获取 Temporal Activity 存根
             FeishuSendPostActivity activity = bridge.activities().getActivity(FeishuSendPostActivity.class);
 
+            Long executionId = context.getExecutionId();
+            String nodeId = node.getId();
+
             String messageId;
-            Object cachedConfig = config.get("_connectionConfig");
+            Object cachedConfig = config.get(WorkflowConstants.CONNECTION_CONFIG_KEY);
             if (cachedConfig != null) {
-                messageId = activity.sendPostWithConfig(cachedConfig, chatId, title, lines);
+                messageId = activity.sendPostWithConfig(
+                    executionId, 0, nodeId,
+                    cachedConfig, chatId, title, lines);
             } else {
-                messageId = activity.sendPost(connectionId, chatId, title, lines);
+                messageId = activity.sendPost(
+                    executionId, 0, nodeId,
+                    connectionId, chatId, title, lines);
             }
 
             success = messageId != null && !messageId.isEmpty();
@@ -121,7 +135,7 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         }
 
         NodeExecutionResult result = NodeExecutionResult.completed();
-        result.setBranchKey(success ? "success" : "failure");
+        result.setBranchKey(success ? BranchKeyConstants.SUCCESS : BranchKeyConstants.FAILURE);
         result.setOutput(output);
         return result;
     }
@@ -137,7 +151,8 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
                 node.getType().name(),
                 NodeRoleConstants.NORMAL,
                 context.getExecutionOrder(),
-                context.getVariables()
+                context.getVariables(),
+                0
             );
             context.setCurrentNodeTraceId(trace.getId());
             return trace;

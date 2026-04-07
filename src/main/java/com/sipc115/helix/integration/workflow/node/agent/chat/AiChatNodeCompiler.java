@@ -1,5 +1,6 @@
 package com.sipc115.helix.integration.workflow.node.agent.chat;
 
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.integration.IntegrationConnection;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
@@ -78,7 +79,7 @@ public class AiChatNodeCompiler implements NodeCompiler {
         }
 
         if (connection.getConfig() != null) {
-            config.put("_connectionConfig", connection.getConfig());
+            config.put(WorkflowConstants.CONNECTION_CONFIG_KEY, connection.getConfig());
         }
     }
 

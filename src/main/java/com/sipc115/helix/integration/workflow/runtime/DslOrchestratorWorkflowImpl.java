@@ -1,6 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.runtime;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
+import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.*;
 
 import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBridge;
@@ -176,7 +179,7 @@ public class DslOrchestratorWorkflowImpl {
         if (input == null) {
             return null;
         }
-        Object executionId = input.get("_executionId");
+        Object executionId = input.get(WorkflowConstants.EXECUTION_ID_KEY);
         if (executionId instanceof Long) {
             return (Long) executionId;
         } else if (executionId instanceof Integer) {
@@ -208,41 +211,41 @@ public class DslOrchestratorWorkflowImpl {
      * <h3>执行流程图：</h3>
      * <pre>
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │                        executePlan 循环开始                          │
+     * │                        executePlan 循环开始                           │
      * └─────────────────────────────────────────────────────────────────────┘
      *                                    │
      *                                    ▼
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │  canExecuteNode(node)? ──否──▶ findNextReadyNode ──找到──▶ 继续循环  │
+     * │  canExecuteNode(node)? ──否──▶ findNextReadyNode ──找到──▶ 继续循环    │
      * └─────────────────────────────────────────────────────────────────────┘
      *                  │是
      *                  ▼
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │                      执行节点 (executor.execute)                    │
+     * │                      执行节点 (executor.execute)                      │
      * │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-     * │   │  节点重试   │  │   成功      │  │   失败      │                 │
-     * │   │  机制      │  │             │  │             │                 │
+     * │   │  节点重试     │  │   成功       │  │   失败      │                  │
+     * │   │  机制        │  │             │  │             │                 │
      * │   └─────────────┘  └─────────────┘  └─────────────┘                 │
      * └─────────────────────────────────────────────────────────────────────┘
      *                                    │
      *                                    ▼
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │              节点输出合并到 context.variables                        │
+     * │              节点输出合并到 context.variables                          │
      * │   context.variables[nodeId] = result.output                         │
      * │   context.variables.putAll(result.output)                           │
      * └─────────────────────────────────────────────────────────────────────┘
      *                                    │
      *                                    ▼
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │                   选择下一节点（三级降级策略）                        │
-     * │   1. result.getNextNodeId() 优先使用                                │
-     * │   2. transitionResolver.nextNode() 根据分支键选择                   │
-     * │   3. findNextReadyNode() 全局扫描兜底                              │
+     * │                   选择下一节点（三级降级策略）                            │
+     * │   1. result.getNextNodeId() 优先使用                                  │
+     * │   2. transitionResolver.nextNode() 根据分支键选择                      │
+     * │   3. findNextReadyNode() 全局扫描兜底                                  │
      * └─────────────────────────────────────────────────────────────────────┘
      *                                    │
      *                                    ▼
      * ┌─────────────────────────────────────────────────────────────────────┐
-     * │                      循环直到 END 节点或无节点可执行                  │
+     * │                      循环直到 END 节点或无节点可执行                     │
      * └─────────────────────────────────────────────────────────────────────┘
      * </pre>
      *
@@ -286,7 +289,6 @@ public class DslOrchestratorWorkflowImpl {
         String currentNodeId = plan.getEntryNodeId();
         int maxIterations = plan.getNodes().size() * 2;
         int iteration = 0;
-        Map<String, Integer> nodeRetryCounts = new TreeMap<>();
 
         while (currentNodeId != null && iteration < maxIterations) {
             iteration++;
@@ -304,25 +306,14 @@ public class DslOrchestratorWorkflowImpl {
             context.getNodeStatuses().put(currentNodeId, ExecutionStatus.RUNNING);
             context.incrementExecutionOrder();
 
-            int maxRetries = getMaxRetries(node);
-            int currentRetry = nodeRetryCounts.getOrDefault(currentNodeId, 0);
-
             NodeExecutionResult result;
             try {
                 WorkflowNodeExecutor executor = nodeExecutorRegistry.get(node.getType().name());
                 result = executor.execute(node, context, bridge);
             } catch (Exception e) {
-                if (maxRetries > 0 && currentRetry < maxRetries) {
-                    nodeRetryCounts.put(currentNodeId, currentRetry + 1);
-                    context.getNodeStatuses().put(currentNodeId, ExecutionStatus.WAITING_RETRY);
-                    log.warn("节点 {} 执行失败，即将重试 {}/{}: {}", currentNodeId, currentRetry + 1, maxRetries, e.getMessage());
-                    continue;
-                }
-                log.error("节点 {} 执行失败，已达到最大重试次数: {}", currentNodeId, e.getMessage());
+                log.error("节点 {} 执行失败: {}", currentNodeId, e.getMessage());
                 throw new RuntimeException("节点 " + currentNodeId + " 执行失败: " + e.getMessage(), e);
             }
-
-            nodeRetryCounts.remove(currentNodeId);
 
             if (result.getOutput() != null && !result.getOutput().isEmpty()) {
                 context.getVariables().put(node.getId(), result.getOutput());
@@ -337,7 +328,7 @@ public class DslOrchestratorWorkflowImpl {
                 result.setOutput(null);
             }
 
-            if ("END".equals(node.getType().name())) {
+            if (NodeRoleConstants.END.equals(node.getType().name())) {
                 context.setWorkflowStatus(ExecutionStatus.COMPLETED);
                 return;
             }
@@ -398,23 +389,6 @@ public class DslOrchestratorWorkflowImpl {
             }
         }
         return needed;
-    }
-
-    /**
-     * 获取节点的最大重试次数配置
-     * <p>
-     * 从节点配置的 maxRetries 字段读取重试次数。
-     * 支持 Number 类型的配置值。
-     *
-     * @param node 编译后的节点
-     * @return 最大重试次数，默认0表示不重试
-     */
-    private int getMaxRetries(CompiledNode node) {
-        Object retries = node.getConfig().get("maxRetries");
-        if (retries instanceof Number) {
-            return ((Number) retries).intValue();
-        }
-        return 0;
     }
 
     /**

@@ -1,7 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendpostwithlink;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -43,6 +45,11 @@ import java.util.Map;
  * <p>
  * 此执行器将 API 调用委托给 Temporal Activity 执行，
  * 保证 Workflow 的确定性。
+ *
+ * <h3>幂等性保护：</h3>
+ * <p>
+ * 通过传递 executionId、nodeId、retryCount 给 Activity，
+ * Activity 可以实现幂等性检查，避免 Temporal 重试导致重复发送消息。
  *
  * @author Helix Team
  * @since 2.0.0
@@ -88,14 +95,20 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
 
         boolean success = false;
         try {
-            // 通过 Bridge 获取 Temporal Activity 存根
             FeishuSendPostWithLinkActivity activity = bridge.activities().getActivity(FeishuSendPostWithLinkActivity.class);
 
-            Object cachedConfig = config.get("_connectionConfig");
+            Long executionId = context.getExecutionId();
+            String nodeId = node.getId();
+
+            Object cachedConfig = config.get(WorkflowConstants.CONNECTION_CONFIG_KEY);
             if (cachedConfig != null) {
-                activity.sendPostWithLinkWithConfig(cachedConfig, chatId, title, text, url, linkText);
+                activity.sendPostWithLinkWithConfig(
+                    executionId, 0, nodeId,
+                    cachedConfig, chatId, title, text, url, linkText);
             } else {
-                activity.sendPostWithLink(connectionId, chatId, title, text, url, linkText);
+                activity.sendPostWithLink(
+                    executionId, 0, nodeId,
+                    connectionId, chatId, title, text, url, linkText);
             }
 
             success = true;
@@ -112,7 +125,7 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
         }
 
         NodeExecutionResult result = NodeExecutionResult.completed();
-        result.setBranchKey(success ? "success" : "failure");
+        result.setBranchKey(success ? BranchKeyConstants.SUCCESS : BranchKeyConstants.FAILURE);
         result.setOutput(output);
         return result;
     }
@@ -128,7 +141,8 @@ public class FeishuSendPostWithLinkNodeExecutor implements WorkflowNodeExecutor 
                 node.getType().name(),
                 NodeRoleConstants.NORMAL,
                 context.getExecutionOrder(),
-                context.getVariables()
+                context.getVariables(),
+                0
             );
             context.setCurrentNodeTraceId(trace.getId());
             return trace;

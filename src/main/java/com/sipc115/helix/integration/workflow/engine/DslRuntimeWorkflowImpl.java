@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.engine;
 
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.HumanSignalPayload;
 import com.sipc115.helix.domain.workflow.WorkflowStateView;
@@ -81,7 +82,7 @@ public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
             return null;
         }
 
-        Object rawExecutionId = input.get("_executionId");
+        Object rawExecutionId = input.get(WorkflowConstants.EXECUTION_ID_KEY);
         if (rawExecutionId instanceof Long) {
             return (Long) rawExecutionId;
         }
@@ -100,7 +101,7 @@ public class DslRuntimeWorkflowImpl implements DslRuntimeWorkflow {
 
     private Map<String, Object> buildOutputSnapshot() {
         Map<String, Object> variables = new HashMap<>(interpreter.currentState().getVariables());
-        variables.remove("_executionId");
+        variables.remove(WorkflowConstants.EXECUTION_ID_KEY);
         return variables;
     }
 }

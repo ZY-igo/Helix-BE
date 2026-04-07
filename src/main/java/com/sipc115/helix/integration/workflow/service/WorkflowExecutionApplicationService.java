@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.service;
 
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
 import com.sipc115.helix.domain.workflow.ScheduleSpec;
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
@@ -76,7 +77,7 @@ public class WorkflowExecutionApplicationService {
         if (request.getInput() != null) {
             inputWithExecutionId.putAll(request.getInput());
         }
-        inputWithExecutionId.put("_executionId", execution.getId());
+        inputWithExecutionId.put(WorkflowConstants.EXECUTION_ID_KEY, execution.getId());
 
         WorkflowOptions options = WorkflowOptions.newBuilder()
             .setTaskQueue(TASK_QUEUE)

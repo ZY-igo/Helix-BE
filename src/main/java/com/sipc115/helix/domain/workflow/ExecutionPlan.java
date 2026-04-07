@@ -158,6 +158,7 @@ public class ExecutionPlan implements Serializable {
 
     /**
      * 已完成的前驱节点集合（运行时）
+     * <p> 实际并没有用该属性判断节点是否可以执行, 因此该属性目前处于保留状态
      * <p>
      * 记录每个节点的哪些前驱已经完成执行。
      * 当 completedPredecessors[nodeId] 包含所有 predecessors[nodeId] 时，节点可以执行。

@@ -1,7 +1,9 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext;
 
+import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
@@ -41,22 +43,19 @@ import java.util.Map;
  * 此执行器将 API 调用委托给 Temporal Activity 执行，
  * 保证 Workflow 的确定性。
  *
+ * <h3>幂等性保护：</h3>
+ * <p>
+ * 通过传递 executionId、nodeId、retryCount 给 Activity，
+ * Activity 可以实现幂等性检查，避免 Temporal 重试导致重复发送消息。
+ *
  * <h3>执行流程：</h3>
  * <pre>
  * Temporal Workflow Thread
  *   └─ FeishuSendTextNodeExecutor.execute()
  *       └─ bridge.activities().getActivity(FeishuSendTextActivity.class)
- *           └─ FeishuSendTextActivity.sendText()  ← 在 Activity Worker 上执行
- *               └─ FeishuApiHandler.sendText()   ← 真正的 HTTP 调用
- * </pre>
- *
- * <h3>与旧架构对比：</h3>
- * <pre>
- * 旧架构（直接调用 - 违反确定性原则）：
- *   Executor → FeishuAuthClient → FeishuApiHandler  ❌ HTTP 调用在 Workflow 线程
- *
- * 新架构（Activity 委托 - 正确做法）：
- *   Executor → FeishuSendTextActivity → FeishuApiHandler  ✅ HTTP 调用在 Activity Worker
+ *           └─ FeishuSendTextActivity.sendText()
+ *               └─ 幂等性检查 (通过 executionId + nodeId + retryCount)
+ *               └─ FeishuApiHandler.sendText()  ← 在 Activity Worker 上执行
  * </pre>
  *
  * @author Helix Team
@@ -113,14 +112,26 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
             // Activity 调用会在 Activity Worker 上执行，而不是 Workflow 线程
             FeishuSendTextActivity activity = bridge.activities().getActivity(FeishuSendTextActivity.class);
 
+            // 获取幂等性参数
+            Long executionId = context.getExecutionId();
+            String nodeId = node.getId();
+
             String messageId;
-            Object cachedConfig = config.get("_connectionConfig");
+            Object cachedConfig = config.get(WorkflowConstants.CONNECTION_CONFIG_KEY);
             if (cachedConfig != null) {
                 // 使用连接配置调用（避免重复查询）
-                messageId = activity.sendTextWithConfig(cachedConfig, chatId, text);
+                // 传递幂等性参数给 Activity
+                messageId = activity.sendTextWithConfig(
+                    executionId, 0, nodeId,
+                    cachedConfig, chatId, text
+                );
             } else {
                 // 使用 connectionId 调用
-                messageId = activity.sendText(connectionId, chatId, text);
+                // 传递幂等性参数给 Activity
+                messageId = activity.sendText(
+                    executionId, 0, nodeId,
+                    connectionId, chatId, text
+                );
             }
 
             success = messageId != null && !messageId.isEmpty();
@@ -129,7 +140,8 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
             output.put("timestamp", System.currentTimeMillis());
 
             markNodeSuccess(trace, output);
-            log.info("发送文本消息完成: connectionId={}, chatId={}, success={}", connectionId, chatId, success);
+            log.info("发送文本消息完成: connectionId={}, chatId={}, success={}, messageId={}",
+                connectionId, chatId, success, messageId);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
@@ -138,7 +150,7 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         }
 
         NodeExecutionResult result = NodeExecutionResult.completed();
-        result.setBranchKey(success ? "success" : "failure");
+        result.setBranchKey(success ? BranchKeyConstants.SUCCESS : BranchKeyConstants.FAILURE);
         result.setOutput(output);
         return result;
     }
@@ -157,7 +169,8 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
                 node.getType().name(),
                 NodeRoleConstants.NORMAL,
                 context.getExecutionOrder(),
-                context.getVariables()
+                context.getVariables(),
+                0
             );
             context.setCurrentNodeTraceId(trace.getId());
             return trace;

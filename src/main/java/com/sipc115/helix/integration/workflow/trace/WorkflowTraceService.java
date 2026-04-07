@@ -698,6 +698,31 @@ public class WorkflowTraceService {
     }
 
     /**
+     * 查询指定节点的成功追踪记录
+     * <p>
+     * 获取指定工作流执行中某个节点的所有追踪记录。
+     * 用于幂等性检查时直接查询特定节点。
+     *
+     * <h3>性能优化：</h3>
+     * <p>
+     * 此方法使用数据库索引直接查询，比遍历所有节点更高效。
+     *
+     * <h3>使用场景：</h3>
+     * <ul>
+     *   <li>Activity 幂等性检查</li>
+     *   <li>节点重跑历史查询</li>
+     *   <li>特定节点执行历史分析</li>
+     * </ul>
+     *
+     * @param executionId 工作流执行记录 ID
+     * @param nodeId 节点 ID
+     * @return 该节点的追踪记录列表（按执行顺序排列）
+     */
+    public List<NodeExecutionTraceEntity> getNodeTracesByNodeId(Long executionId, String nodeId) {
+        return nodeTraceRepo.findByExecutionIdAndNodeId(executionId, nodeId);
+    }
+
+    /**
      * 获取工作流执行统计信息
      * <p>
      * 统计指定工作流的执行情况，包括总数、成功数、失败数和平均耗时。

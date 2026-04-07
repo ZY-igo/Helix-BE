@@ -1,6 +1,7 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext;
 
+import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.integration.IntegrationConnection;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
@@ -69,7 +70,7 @@ public class FeishuSendTextNodeCompiler implements NodeCompiler {
         }
 
         if (source.getConfig() != null && connection.getConfig() != null) {
-            source.getConfig().put("_connectionConfig", connection.getConfig());
+            source.getConfig().put(WorkflowConstants.CONNECTION_CONFIG_KEY, connection.getConfig());
         }
     }
 
