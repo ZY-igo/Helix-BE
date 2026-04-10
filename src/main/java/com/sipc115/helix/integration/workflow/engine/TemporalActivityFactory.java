@@ -2,6 +2,7 @@
 package com.sipc115.helix.integration.workflow.engine;
 
 import io.temporal.activity.ActivityOptions;
+import io.temporal.common.RetryOptions;
 import io.temporal.workflow.Workflow;
 
 /**
@@ -62,10 +63,12 @@ public class TemporalActivityFactory implements ActivityFactory {
             optionsBuilder.setTaskQueue(spec.getTaskQueue());
         }
 
-        // 设置重试选项（如果指定）
-        if (spec.getRetryOptions() != null) {
-            optionsBuilder.setRetryOptions(spec.getRetryOptions());
+        // 设置重试选项（确保默认有限重试次数）
+        RetryOptions retryOptions = spec.getRetryOptions();
+        if (retryOptions == null) {
+            retryOptions = ActivityInvocationSpec.defaultSpec().getRetryOptions();
         }
+        optionsBuilder.setRetryOptions(retryOptions);
 
         // 在当前 Workflow 上下文中创建 Activity 存根
         return Workflow.newActivityStub(activityClass, optionsBuilder.build());

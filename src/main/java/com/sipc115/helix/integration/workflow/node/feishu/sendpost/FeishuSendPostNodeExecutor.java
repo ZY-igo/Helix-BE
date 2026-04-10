@@ -2,20 +2,16 @@
 package com.sipc115.helix.integration.workflow.node.feishu.sendpost;
 
 import com.sipc115.helix.common.constant.BranchKeyConstants;
-import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
-import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
 import com.sipc115.helix.integration.workflow.node.feishu.sendpost.activity.FeishuSendPostActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
-import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -70,12 +66,6 @@ import java.util.Map;
 public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuSendPostNodeExecutor.class);
-    private static WorkflowTraceService traceService;
-
-    @Autowired
-    public void setTraceService(WorkflowTraceService traceService) {
-        FeishuSendPostNodeExecutor.traceService = traceService;
-    }
 
     @Override
     public boolean supports(String type) {
@@ -84,8 +74,6 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
     @Override
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
-        NodeExecutionTraceEntity trace = startTrace(node, context);
-
         Map<String, Object> config = node.getConfig();
         Long connectionId = getLongValue(config, "connectionId");
         if (connectionId == null) {
@@ -125,12 +113,10 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
             output.put("messageId", messageId);
             output.put("timestamp", System.currentTimeMillis());
 
-            markNodeSuccess(trace, output);
             log.info("发送富文本消息完成: connectionId={}, chatId={}, success={}", connectionId, chatId, success);
         } catch (Exception e) {
             output.put("success", false);
             output.put("error", e.getMessage());
-            markNodeFailed(trace, e.getMessage());
             throw new RuntimeException("飞书发送富文本消息失败: " + e.getMessage(), e);
         }
 
@@ -138,48 +124,6 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
         result.setBranchKey(success ? BranchKeyConstants.SUCCESS : BranchKeyConstants.FAILURE);
         result.setOutput(output);
         return result;
-    }
-
-    private NodeExecutionTraceEntity startTrace(CompiledNode node, ExecutionContext context) {
-        if (traceService == null || context.getExecutionId() == null) {
-            return null;
-        }
-        try {
-            NodeExecutionTraceEntity trace = traceService.startNodeExecution(
-                context.getExecutionId(),
-                node.getId(),
-                node.getType().name(),
-                NodeRoleConstants.NORMAL,
-                context.getExecutionOrder(),
-                context.getVariables(),
-                0
-            );
-            context.setCurrentNodeTraceId(trace.getId());
-            return trace;
-        } catch (Exception e) {
-            log.warn("启动节点追踪失败: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private void markNodeSuccess(NodeExecutionTraceEntity trace, Map<String, Object> output) {
-        if (traceService != null && trace != null) {
-            try {
-                traceService.markNodeSuccess(trace.getId(), output);
-            } catch (Exception e) {
-                log.warn("标记节点成功失败: {}", e.getMessage());
-            }
-        }
-    }
-
-    private void markNodeFailed(NodeExecutionTraceEntity trace, String errorMessage) {
-        if (traceService != null && trace != null) {
-            try {
-                traceService.markNodeFailed(trace.getId(), errorMessage, null);
-            } catch (Exception e) {
-                log.warn("标记节点失败失败: {}", e.getMessage());
-            }
-        }
     }
 
     private String getStringValue(Map<String, Object> config, String key) {

@@ -2,19 +2,16 @@
 package com.sipc115.helix.integration.workflow.node.agent.chat;
 
 import com.sipc115.helix.common.constant.BranchKeyConstants;
-import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionStatus;
-import com.sipc115.helix.domain.workflow.NodeExecutionTraceEntity;
 import com.sipc115.helix.integration.expression.ExpressionEngine;
 import com.sipc115.helix.integration.workflow.node.agent.chat.activity.AiChatActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowNodeExecutor;
 import com.sipc115.helix.integration.workflow.runtime.WorkflowRuntimeBridge;
-import com.sipc115.helix.integration.workflow.trace.WorkflowTraceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,13 +86,7 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatNodeExecutor.class);
 
-    private static WorkflowTraceService traceService;
     private static ExpressionEngine expressionEngine;
-
-    @Autowired
-    public void setTraceService(WorkflowTraceService traceService) {
-        AiChatNodeExecutor.traceService = traceService;
-    }
 
     @Autowired
     public void setExpressionEngine(ExpressionEngine expressionEngine) {
@@ -109,24 +100,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
     @Override
     public NodeExecutionResult execute(CompiledNode node, ExecutionContext context, WorkflowRuntimeBridge bridge) {
-        NodeExecutionTraceEntity trace = null;
-        if (traceService != null && context.getExecutionId() != null) {
-            try {
-                trace = traceService.startNodeExecution(
-                        context.getExecutionId(),
-                        node.getId(),
-                        node.getType().name(),
-                        NodeRoleConstants.NORMAL,
-                        context.getExecutionOrder(),
-                        context.getVariables(),
-                        0
-                );
-                context.setCurrentNodeTraceId(trace.getId());
-            } catch (Exception e) {
-                log.warn("启动节点追踪失败: {}", e.getMessage());
-            }
-        }
-
         try {
             Map<String, Object> config = node.getConfig();
 
@@ -178,14 +151,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
             output.put("status", "success");
             output.put("timestamp", System.currentTimeMillis());
 
-            if (traceService != null && trace != null) {
-                try {
-                    traceService.markNodeSuccess(trace.getId(), output);
-                } catch (Exception e) {
-                    log.warn("标记节点成功失败: {}", e.getMessage());
-                }
-            }
-
             NodeExecutionResult result = new NodeExecutionResult();
             result.setStatus(ExecutionStatus.COMPLETED);
             result.setOutput(output);
@@ -193,14 +158,6 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
         } catch (Exception e) {
             log.error("AI 聊天节点执行失败: {}", node.getId(), e);
-
-            if (traceService != null && trace != null) {
-                try {
-                    traceService.markNodeFailed(trace.getId(), e.getMessage(), e.toString());
-                } catch (Exception ex) {
-                    log.warn("标记节点失败失败: {}", ex.getMessage());
-                }
-            }
 
             NodeExecutionResult result = new NodeExecutionResult();
             result.setStatus(ExecutionStatus.FAILED);

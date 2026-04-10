@@ -2,6 +2,8 @@
 package com.sipc115.helix.integration.workflow.node.feishu.sendtext.activity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
+import java.util.Map;
 import com.sipc115.helix.integration.connect.ConnectionClientRegistry;
 import com.sipc115.helix.integration.connect.lark.FeishuApiHandler;
 import com.sipc115.helix.integration.connect.lark.FeishuAuthClient;
@@ -47,7 +49,6 @@ import org.springframework.web.client.RestClient;
  * @author Helix Team
  * @since 2.0.0
  * @see FeishuSendTextActivity
- * @see FeishuSendTextNodeExecutor
  */
 @Component
 public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
@@ -106,30 +107,39 @@ public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
             return cachedMessageId;
         }
 
+        // 2. 记录开始节点追踪
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
-            // 2. 获取飞书认证客户端
+            // 3. 获取飞书认证客户端
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
 
-            // 3. 获取访问令牌
+            // 4. 获取访问令牌
             String token = authClient.getToken();
             log.debug("获取飞书访问令牌成功, connectionId={}", connectionId);
 
-            // 4. 创建飞书 API 处理器
+            // 5. 创建飞书 API 处理器
             FeishuApiHandler handler = new FeishuApiHandler(
                 new ObjectMapper(),
                 RestClient.builder()
             );
 
-            // 5. 发送消息
+            // 6. 发送消息
             String messageId = handler.sendText(token, chatId, text);
             log.info("FeishuSendTextActivity: 消息发送成功, attemptId={}, messageId={}",
                 attemptId, messageId);
+
+            // 7. 记录成功状态
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("messageId", messageId);
+            markNodeSuccess(traceId, successOutput);
 
             return messageId;
 
         } catch (Exception e) {
             log.error("FeishuSendTextActivity: 消息发送失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发送文本消息失败: " + e.getMessage(), e);
         }
     }
@@ -152,34 +162,43 @@ public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
             return cachedMessageId;
         }
 
+        // 2. 记录开始节点追踪
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
-            // 2. 获取飞书认证客户端（使用连接配置）
+            // 3. 获取飞书认证客户端（使用连接配置）
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(
                 null,
                 "FEISHU",
                 connectionConfig
             );
 
-            // 3. 获取访问令牌
+            // 4. 获取访问令牌
             String token = authClient.getToken();
             log.debug("获取飞书访问令牌成功");
 
-            // 4. 创建飞书 API 处理器
+            // 5. 创建飞书 API 处理器
             FeishuApiHandler handler = new FeishuApiHandler(
                 new ObjectMapper(),
                 RestClient.builder()
             );
 
-            // 5. 发送消息
+            // 6. 发送消息
             String messageId = handler.sendText(token, chatId, text);
             log.info("FeishuSendTextActivity: 消息发送成功, attemptId={}, messageId={}",
                 attemptId, messageId);
+
+            // 7. 记录成功状态
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("messageId", messageId);
+            markNodeSuccess(traceId, successOutput);
 
             return messageId;
 
         } catch (Exception e) {
             log.error("FeishuSendTextActivity: 消息发送失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发送文本消息失败: " + e.getMessage(), e);
         }
     }
@@ -252,6 +271,44 @@ public class FeishuSendTextActivityImpl implements FeishuSendTextActivity {
             log.warn("检查节点成功状态异常，跳过幂等检查: attemptId={}, error={}",
                 attemptId, e.getMessage());
             return null;
+        }
+    }
+
+    private Long startNodeTracking(Long executionId, String nodeId) {
+        if (traceService == null) {
+            return null;
+        }
+        try {
+            var trace = traceService.startNodeExecution(
+                executionId, nodeId, "FeishuSendText",
+                "NORMAL", 0, null, 0
+            );
+            return trace != null ? trace.getId() : null;
+        } catch (Exception e) {
+            log.warn("启动节点追踪失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void markNodeSuccess(Long traceId, Map<String, Object> output) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeSuccess(traceId, output);
+        } catch (Exception e) {
+            log.warn("标记节点成功失败: {}", e.getMessage());
+        }
+    }
+
+    private void markNodeFailed(Long traceId, String errorMessage) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeFailed(traceId, errorMessage, null);
+        } catch (Exception e) {
+            log.warn("标记节点失败失败: {}", e.getMessage());
         }
     }
 }

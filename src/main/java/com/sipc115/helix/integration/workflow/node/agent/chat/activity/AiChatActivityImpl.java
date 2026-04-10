@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * AI 聊天 Activity 实现
  * <p>
@@ -58,6 +61,8 @@ public class AiChatActivityImpl implements AiChatActivity {
             return cachedResponse;
         }
 
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
             LlmAuthClient llmClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             log.debug("获取 LLM 客户端成功, connectionId={}", connectionId);
@@ -66,11 +71,15 @@ public class AiChatActivityImpl implements AiChatActivity {
             log.info("AiChatActivity: LLM 调用成功, attemptId={}, responseLength={}",
                 attemptId, response != null ? response.length() : 0);
 
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("response", response);
+            markNodeSuccess(traceId, successOutput);
             return response;
 
         } catch (Exception e) {
             log.error("AiChatActivity: LLM 调用失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("AI 对话调用失败: " + e.getMessage(), e);
         }
     }
@@ -90,6 +99,8 @@ public class AiChatActivityImpl implements AiChatActivity {
             return cachedResponse;
         }
 
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
             LlmAuthClient llmClient = connectionRegistry.getOrCreateClient(
                 null,
@@ -102,11 +113,15 @@ public class AiChatActivityImpl implements AiChatActivity {
             log.info("AiChatActivity: LLM 调用成功, attemptId={}, responseLength={}",
                 attemptId, response != null ? response.length() : 0);
 
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("response", response);
+            markNodeSuccess(traceId, successOutput);
             return response;
 
         } catch (Exception e) {
             log.error("AiChatActivity: LLM 调用失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("AI 对话调用失败: " + e.getMessage(), e);
         }
     }
@@ -147,6 +162,44 @@ public class AiChatActivityImpl implements AiChatActivity {
             log.warn("检查节点成功状态异常，跳过幂等检查: attemptId={}, error={}",
                 attemptId, e.getMessage());
             return null;
+        }
+    }
+
+    private Long startNodeTracking(Long executionId, String nodeId) {
+        if (traceService == null) {
+            return null;
+        }
+        try {
+            var trace = traceService.startNodeExecution(
+                executionId, nodeId, "AiChat",
+                "NORMAL", 0, null, 0
+            );
+            return trace != null ? trace.getId() : null;
+        } catch (Exception e) {
+            log.warn("启动节点追踪失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void markNodeSuccess(Long traceId, Map<String, Object> output) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeSuccess(traceId, output);
+        } catch (Exception e) {
+            log.warn("标记节点成功失败: {}", e.getMessage());
+        }
+    }
+
+    private void markNodeFailed(Long traceId, String errorMessage) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeFailed(traceId, errorMessage, null);
+        } catch (Exception e) {
+            log.warn("标记节点失败失败: {}", e.getMessage());
         }
     }
 }

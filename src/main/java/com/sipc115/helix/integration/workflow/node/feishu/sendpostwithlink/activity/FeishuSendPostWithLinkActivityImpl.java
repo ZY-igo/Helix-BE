@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 飞书发送带链接富文本消息 Activity 实现
  * <p>
@@ -57,6 +60,8 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             return;
         }
 
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
@@ -70,9 +75,12 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             handler.sendPostWithLink(token, chatId, title, text, url, linkText);
             log.info("FeishuSendPostWithLinkActivity: 带链接富文本消息发送成功, attemptId={}", attemptId);
 
+            markNodeSuccess(traceId, new HashMap<>());
+
         } catch (Exception e) {
             log.error("FeishuSendPostWithLinkActivity: 带链接富文本消息发送失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发送带链接富文本消息失败: " + e.getMessage(), e);
         }
     }
@@ -88,6 +96,8 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             log.info("FeishuSendPostWithLinkActivity: 检测到重复执行，跳过发送, attemptId={}", attemptId);
             return;
         }
+
+        Long traceId = startNodeTracking(executionId, nodeId);
 
         try {
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(
@@ -107,9 +117,12 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             handler.sendPostWithLink(token, chatId, title, text, url, linkText);
             log.info("FeishuSendPostWithLinkActivity: 带链接富文本消息发送成功, attemptId={}", attemptId);
 
+            markNodeSuccess(traceId, new HashMap<>());
+
         } catch (Exception e) {
             log.error("FeishuSendPostWithLinkActivity: 带链接富文本消息发送失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发送带链接富文本消息失败: " + e.getMessage(), e);
         }
     }
@@ -130,11 +143,10 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             long executionId = Long.parseLong(parts[0]);
             String nodeId = parts[1];
 
-            var traces = traceService.getNodeTraces(executionId);
+            var traces = traceService.getNodeTracesByNodeId(executionId, nodeId);
 
             for (var trace : traces) {
-                if (nodeId.equals(trace.getNodeId()) &&
-                    "SUCCESS".equals(trace.getStatus())) {
+                if ("SUCCESS".equals(trace.getStatus())) {
                     log.info("检测到节点已成功执行过, executionId={}, nodeId={}, attemptId={}",
                         executionId, nodeId, attemptId);
                     return true;
@@ -148,6 +160,44 @@ public class FeishuSendPostWithLinkActivityImpl implements FeishuSendPostWithLin
             log.warn("检查节点成功状态异常，跳过幂等检查: attemptId={}, error={}",
                 attemptId, e.getMessage());
             return false;
+        }
+    }
+
+    private Long startNodeTracking(Long executionId, String nodeId) {
+        if (traceService == null) {
+            return null;
+        }
+        try {
+            var trace = traceService.startNodeExecution(
+                executionId, nodeId, "FeishuSendPostWithLink",
+                "NORMAL", 0, null, 0
+            );
+            return trace != null ? trace.getId() : null;
+        } catch (Exception e) {
+            log.warn("启动节点追踪失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void markNodeSuccess(Long traceId, Map<String, Object> output) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeSuccess(traceId, output);
+        } catch (Exception e) {
+            log.warn("标记节点成功失败: {}", e.getMessage());
+        }
+    }
+
+    private void markNodeFailed(Long traceId, String errorMessage) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeFailed(traceId, errorMessage, null);
+        } catch (Exception e) {
+            log.warn("标记节点失败失败: {}", e.getMessage());
         }
     }
 }

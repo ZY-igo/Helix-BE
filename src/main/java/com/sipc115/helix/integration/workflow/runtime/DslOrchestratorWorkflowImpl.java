@@ -1,7 +1,6 @@
 /*-*- coding: UTF-8 -*-*/
 package com.sipc115.helix.integration.workflow.runtime;
 
-import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.NodeRoleConstants;
 import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.*;
@@ -10,6 +9,8 @@ import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBrid
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * DSL 工作流编排器实现
@@ -374,15 +375,16 @@ public class DslOrchestratorWorkflowImpl {
      */
     private Set<String> computeNeededNodeOutputs(ExecutionPlan plan) {
         Set<String> needed = new TreeSet<>();
+        Pattern pattern = Pattern.compile("\\$\\{([^.]+)\\.");
         for (CompiledNode node : plan.getNodes().values()) {
             Map<String, Object> config = node.getConfig();
             if (config != null) {
                 for (Object value : config.values()) {
                     if (value instanceof String) {
                         String str = (String) value;
-                        if (str.contains("${")) {
-                            needed.add(node.getId());
-                            break;
+                        Matcher matcher = pattern.matcher(str);
+                        while (matcher.find()) {
+                            needed.add(matcher.group(1));
                         }
                     }
                 }

@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 飞书发布云文档 Activity 实现
  * <p>
@@ -59,6 +62,8 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
             return cachedUrl;
         }
 
+        Long traceId = startNodeTracking(executionId, nodeId);
+
         try {
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClientByConnection(connectionId);
             String token = authClient.getToken();
@@ -74,11 +79,15 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
             log.info("FeishuPublishCloudDocActivity: 云文档创建成功, attemptId={}, documentId={}, url={}",
                 attemptId, documentId, url);
 
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("documentUrl", url);
+            markNodeSuccess(traceId, successOutput);
             return url;
 
         } catch (Exception e) {
             log.error("FeishuPublishCloudDocActivity: 云文档发布失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发布云文档失败: " + e.getMessage(), e);
         }
     }
@@ -96,6 +105,8 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
                 attemptId, cachedUrl);
             return cachedUrl;
         }
+
+        Long traceId = startNodeTracking(executionId, nodeId);
 
         try {
             FeishuAuthClient authClient = connectionRegistry.getOrCreateClient(
@@ -117,11 +128,15 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
             log.info("FeishuPublishCloudDocActivity: 云文档创建成功, attemptId={}, documentId={}, url={}",
                 attemptId, documentId, url);
 
+            Map<String, Object> successOutput = new HashMap<>();
+            successOutput.put("documentUrl", url);
+            markNodeSuccess(traceId, successOutput);
             return url;
 
         } catch (Exception e) {
             log.error("FeishuPublishCloudDocActivity: 云文档发布失败, attemptId={}, error={}",
                 attemptId, e.getMessage(), e);
+            markNodeFailed(traceId, e.getMessage());
             throw new RuntimeException("飞书发布云文档失败: " + e.getMessage(), e);
         }
     }
@@ -162,6 +177,44 @@ public class FeishuPublishCloudDocActivityImpl implements FeishuPublishCloudDocA
             log.warn("检查节点成功状态异常，跳过幂等检查: attemptId={}, error={}",
                 attemptId, e.getMessage());
             return null;
+        }
+    }
+
+    private Long startNodeTracking(Long executionId, String nodeId) {
+        if (traceService == null) {
+            return null;
+        }
+        try {
+            var trace = traceService.startNodeExecution(
+                executionId, nodeId, "FeishuPublishCloudDoc",
+                "NORMAL", 0, null, 0
+            );
+            return trace != null ? trace.getId() : null;
+        } catch (Exception e) {
+            log.warn("启动节点追踪失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void markNodeSuccess(Long traceId, Map<String, Object> output) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeSuccess(traceId, output);
+        } catch (Exception e) {
+            log.warn("标记节点成功失败: {}", e.getMessage());
+        }
+    }
+
+    private void markNodeFailed(Long traceId, String errorMessage) {
+        if (traceService == null || traceId == null) {
+            return;
+        }
+        try {
+            traceService.markNodeFailed(traceId, errorMessage, null);
+        } catch (Exception e) {
+            log.warn("标记节点失败失败: {}", e.getMessage());
         }
     }
 }

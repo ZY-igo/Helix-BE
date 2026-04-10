@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface NodeExecutionTraceRepository extends JpaRepository<NodeExecutionTraceEntity, Long> {
@@ -13,4 +14,6 @@ public interface NodeExecutionTraceRepository extends JpaRepository<NodeExecutio
     List<NodeExecutionTraceEntity> findByExecutionIdOrderByExecutionOrder(Long executionId);
 
     List<NodeExecutionTraceEntity> findByExecutionIdAndNodeId(Long executionId, String nodeId);
+
+    Optional<NodeExecutionTraceEntity> findByAttemptId(String attemptId);
 }

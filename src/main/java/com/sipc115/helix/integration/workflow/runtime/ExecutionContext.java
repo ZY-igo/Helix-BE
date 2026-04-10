@@ -43,9 +43,9 @@ import java.util.stream.Collectors;
  * </pre>
  *
  * @author Helix Team
- * @since 2.0.0
  * @see ExecutionPlan
  * @see ExecutionStatus
+ * @since 2.0.0
  */
 @Data
 public class ExecutionContext {
@@ -129,12 +129,12 @@ public class ExecutionContext {
     private Map<String, Object> expressionCache = new TreeMap<>();
 
     /**
- * 需要保留输出的节点集合
- * <p>
- * 通过分析 DSL 配置，确定哪些节点的输出被后续节点引用。
- * 不被引用的节点执行后可以清理其输出，节省内存。
- */
-private Set<String> neededNodeOutputs = new TreeSet<>();
+     * 需要保留输出的节点集合
+     * <p>
+     * 通过分析 DSL 配置，确定哪些节点的输出被后续节点引用。
+     * 不被引用的节点执行后可以清理其输出，节省内存。
+     */
+    private Set<String> neededNodeOutputs = new TreeSet<>();
 
     public ExecutionContext() {
     }
@@ -162,6 +162,7 @@ private Set<String> neededNodeOutputs = new TreeSet<>();
 
     /**
      * 获取缓存的表达式结果
+     *
      * @param expression 表达式字符串
      * @return 缓存的结果，如果不存在返回 null
      */
@@ -171,8 +172,9 @@ private Set<String> neededNodeOutputs = new TreeSet<>();
 
     /**
      * 缓存表达式求值结果
+     *
      * @param expression 表达式字符串
-     * @param result 求值结果
+     * @param result     求值结果
      */
     public void cacheExpressionResult(String expression, Object result) {
         expressionCache.put(expression, result);
@@ -182,6 +184,7 @@ private Set<String> neededNodeOutputs = new TreeSet<>();
      * 如果节点输出不需要则清理
      * <p>
      * 内存优化用：如果节点的输出没有被后续节点引用，则清空输出。
+     *
      * @param nodeId 节点ID
      * @param output 节点输出
      */
@@ -194,32 +197,34 @@ private Set<String> neededNodeOutputs = new TreeSet<>();
     }
 
     /**
- * 清理节点的展开变量
- * <p>
- * 当节点执行完成后，如果其输出不被需要，清理以 nodeId.xxx 形式存储的展开变量。
- *
- * <h3>示例：</h3>
- * <pre>
- * 清理前: variables = {"A.result": "xxx", "A.status": "ok", "B.output": "yyy"}
- * 清理 A:  variables = {"B.output": "yyy"}
- * </pre>
- * @param nodeId 节点ID
- */
-public void cleanupVariablesForNode(String nodeId) {
-    Set<String> keysToRemove = new TreeSet<>();
-    for (Map.Entry<String, Object> entry : variables.entrySet()) {
-        String key = entry.getKey();
-        if (key.startsWith(nodeId + ".")) {
-            keysToRemove.add(key);
+     * 清理节点的展开变量
+     * <p>
+     * 当节点执行完成后，如果其输出不被需要，清理以 nodeId.xxx 形式存储的展开变量。
+     *
+     * <h3>示例：</h3>
+     * <pre>
+     * 清理前: variables = {"A.result": "xxx", "A.status": "ok", "B.output": "yyy"}
+     * 清理 A:  variables = {"B.output": "yyy"}
+     * </pre>
+     *
+     * @param nodeId 节点ID
+     */
+    public void cleanupVariablesForNode(String nodeId) {
+        Set<String> keysToRemove = new TreeSet<>();
+        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals(nodeId) || key.startsWith(nodeId + ".")) {
+                keysToRemove.add(key);
+            }
         }
+        keysToRemove.forEach(variables::remove);
     }
-    keysToRemove.forEach(variables::remove);
-}
 
     /**
      * 转换为工作流状态视图
      * <p>
      * 用于查询工作流执行状态和返回给调用方。
+     *
      * @return 工作流状态视图对象
      */
     public WorkflowStateView toView() {
