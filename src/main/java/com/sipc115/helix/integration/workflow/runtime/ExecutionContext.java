@@ -136,6 +136,32 @@ public class ExecutionContext {
      */
     private Set<String> neededNodeOutputs = new TreeSet<>();
 
+    /**
+     * 运行时变量引用计数（精准内存清理用）
+     * <p>
+     * 记录每个节点被多少下游节点引用。
+     * 每当一个下游节点完成执行，引用计数减 1。
+     * 当引用计数降为 0 时，该节点的输出可以被安全清理。
+     *
+     * <h3>数据结构：</h3>
+     * <pre>
+     * variableRefCount = {
+     *     "node-A": 2,    // A 被 B 和 C 引用
+     *     "node-B": 1,    // B 被 D 引用
+     *     "node-C": 0,    // C 无下游引用
+     *     "node-D": 0     // D 无下游引用
+     * }
+     * </pre>
+     *
+     * <h3>工作流程：</h3>
+     * <pre>
+     * 1. 初始化：根据 variableDependencies 构建引用计数
+     * 2. 节点完成： decrementRefCount(nodeId)
+     * 3. 清理判断：canCleanup(nodeId) → refCount == 0
+     * </pre>
+     */
+    private Map<String, Integer> variableRefCount = new TreeMap<>();
+
     public ExecutionContext() {
     }
 
@@ -144,6 +170,7 @@ public class ExecutionContext {
         if (input != null) {
             this.variables.putAll(input);
         }
+        initVariableRefCount();
     }
 
     /**
@@ -151,6 +178,116 @@ public class ExecutionContext {
      */
     public void incrementExecutionOrder() {
         this.executionOrder++;
+    }
+
+    /**
+     * 初始化变量引用计数
+     * <p>
+     * 根据编译期构建的 variableDependencies 图，
+     * 计算每个节点被多少下游节点引用。
+     *
+     * <h3>算法：</h3>
+     * <pre>
+     * variableDependencies = {
+     *     "B": {"A": 1},   // B 依赖 A
+     *     "C": {"A": 1},   // C 也依赖 A
+     *     "D": {"B": 1}    // D 依赖 B
+     * }
+     *
+     * 计算结果：
+     * refCount["A"] = 2  (B 和 C 都引用 A)
+     * refCount["B"] = 1  (D 引用 B)
+     * refCount["C"] = 0  (无下游引用)
+     * refCount["D"] = 0  (无下游引用)
+     * </pre>
+     */
+    private void initVariableRefCount() {
+        if (plan == null || plan.getVariableDependencies() == null) {
+            return;
+        }
+
+        Map<String, Map<String, Integer>> dependencies = plan.getVariableDependencies();
+        Map<String, Integer> refCount = new TreeMap<>();
+
+        // 初始化所有节点的引用计数为 0
+        if (plan.getNodes() != null) {
+            for (String nodeId : plan.getNodes().keySet()) {
+                refCount.put(nodeId, 0);
+            }
+        }
+
+        // 统计每个节点被引用的次数
+        for (Map<String, Integer> deps : dependencies.values()) {
+            for (Map.Entry<String, Integer> entry : deps.entrySet()) {
+                String referencedNode = entry.getKey();
+                int count = entry.getValue();
+                refCount.merge(referencedNode, count, Integer::sum);
+            }
+        }
+
+        this.variableRefCount = refCount;
+    }
+
+    /**
+     * 递减节点的引用计数
+     * <p>
+     * 当下游节点完成执行时调用，将下游节点对上游节点的引用计数减 1。
+     *
+     * <h3>场景：</h3>
+     * <pre>
+     * A → B → C
+     *
+     * B 执行完成：decrementRefCount("B")
+     *   → A 的引用计数 -1
+     *
+     * C 执行完成：decrementRefCount("C")
+     *   → B 的引用计数 -1
+     * </pre>
+     *
+     * @param nodeId 下游节点ID
+     */
+    public void decrementRefCount(String nodeId) {
+        if (nodeId == null || plan == null || plan.getVariableDependencies() == null) {
+            return;
+        }
+
+        Map<String, Integer> deps = plan.getVariableDependencies().get(nodeId);
+        if (deps == null) {
+            return;
+        }
+
+        for (String referencedNode : deps.keySet()) {
+            Integer current = variableRefCount.get(referencedNode);
+            if (current != null && current > 0) {
+                variableRefCount.put(referencedNode, current - 1);
+            }
+        }
+    }
+
+    /**
+     * 检查节点的输出是否可以清理
+     * <p>
+     * 当节点的引用计数降为 0 时，表示没有下游节点再需要它，可以安全清理。
+     *
+     * @param nodeId 节点ID
+     * @return true 表示可以清理，false 表示仍有下游依赖
+     */
+    public boolean canCleanup(String nodeId) {
+        if (nodeId == null) {
+            return true;
+        }
+        Integer refCount = variableRefCount.get(nodeId);
+        return refCount == null || refCount == 0;
+    }
+
+    /**
+     * 获取节点的当前引用计数
+     *
+     * @param nodeId 节点ID
+     * @return 引用计数，如果不存在返回 -1
+     */
+    public int getRefCount(String nodeId) {
+        return variableRefCount.getOrDefault(nodeId, -1);
     }
 
     /**

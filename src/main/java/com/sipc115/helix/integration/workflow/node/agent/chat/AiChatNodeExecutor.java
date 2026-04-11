@@ -7,6 +7,7 @@ import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionStatus;
 import com.sipc115.helix.integration.expression.ExpressionEngine;
+import com.sipc115.helix.integration.workflow.engine.ActivityInvocationSpec;
 import com.sipc115.helix.integration.workflow.node.agent.chat.activity.AiChatActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
@@ -123,7 +124,8 @@ public class AiChatNodeExecutor implements WorkflowNodeExecutor {
 
             log.info("执行 AI 聊天节点: {}, connectionId: {}", node.getId(), connectionId);
 
-            AiChatActivity activity = bridge.activities().getActivity(AiChatActivity.class);
+            ActivityInvocationSpec activitySpec = ActivityInvocationSpec.fromNodeConfig(config);
+            AiChatActivity activity = bridge.activities().getActivity(AiChatActivity.class, activitySpec);
 
             Long executionId = context.getExecutionId();
             String nodeId = node.getId();

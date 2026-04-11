@@ -137,7 +137,7 @@ public class ExecutionPlan implements Serializable {
     private Map<String, Set<String>> predecessors = new TreeMap<>();
 
     /**
-     * 节点后继关系（出度）
+ * 节点后继关系（出度）
      * <p>
      * key: 节点ID, value: 该节点的所有后继节点ID集合
      *
@@ -155,6 +155,35 @@ public class ExecutionPlan implements Serializable {
      * </pre>
      */
     private Map<String, Set<String>> successors = new TreeMap<>();
+
+    /**
+     * 变量引用依赖图（编译期构建）
+     * <p>
+     * 记录每个节点引用了哪些上游节点的输出。
+     * 用于精准内存清理：只有当一个变量的引用计数降为 0 时，才从上下文中删除。
+     *
+     * <h3>数据结构：</h3>
+     * <pre>
+     * variableDependencies: {
+     *     "node-B": {"node-A": 1},        // B 引用了 A 的输出，引用计数 1
+     *     "node-C": {"node-A": 1},        // C 也引用了 A
+     *     "node-D": {"node-B": 1, "node-C": 1}  // D 引用了 B 和 C
+     * }
+     * </pre>
+     *
+     * <h3>构建时机：</h3>
+     * <ul>
+     *   <li>编译期：DefaultDslCompiler.compile() 中构建</li>
+     *   <li>运行时：只读，用于判断何时可以清理变量</li>
+     * </ul>
+     *
+     * <h3>用途：</h3>
+     * <ul>
+     *   <li>精准内存清理：引用计数归零才删除</li>
+     *   <li>避免误删：下游节点仍在使用的变量不会被删除</li>
+     * </ul>
+     */
+    private Map<String, Map<String, Integer>> variableDependencies = new TreeMap<>();
 
     /**
      * 已完成的前驱节点集合（运行时）

@@ -5,6 +5,7 @@ import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
+import com.sipc115.helix.integration.workflow.engine.ActivityInvocationSpec;
 import com.sipc115.helix.integration.workflow.node.feishu.sendpost.activity.FeishuSendPostActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
@@ -91,7 +92,8 @@ public class FeishuSendPostNodeExecutor implements WorkflowNodeExecutor {
 
         boolean success = false;
         try {
-            FeishuSendPostActivity activity = bridge.activities().getActivity(FeishuSendPostActivity.class);
+            ActivityInvocationSpec activitySpec = ActivityInvocationSpec.fromNodeConfig(config);
+            FeishuSendPostActivity activity = bridge.activities().getActivity(FeishuSendPostActivity.class, activitySpec);
 
             Long executionId = context.getExecutionId();
             String nodeId = node.getId();

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -105,7 +106,11 @@ public class DefaultDslCompiler implements DslCompiler {
             computePredecessorsAndSuccessors(dsl, plan);
             logger.debug("Computed predecessors and successors for workflow");
 
-            // 10. 设置调度信息（如果有）
+            // 10. 计算变量依赖图（用于精准内存清理）
+            computeVariableDependencies(dsl, plan);
+            logger.debug("Computed variable dependencies for workflow");
+
+            // 11. 设置调度信息（如果有）
             plan.setSchedule(dsl.getSchedule());
 
             logger.info("Compilation completed successfully for workflow: {}", dsl.getWorkflowId());
@@ -152,7 +157,66 @@ public class DefaultDslCompiler implements DslCompiler {
     private CompiledNode compileNodeWithRegistry(DslNodeSpec source, CompileContext context) {
         NodeCompiler compiler = nodeCompilerRegistry.getRequiredCompiler(source.getType());
         compiler.validate(source, context);
-        return compiler.compile(source, context);
+        CompiledNode compiledNode = compiler.compile(source, context);
+        attachActivityInvocationConfig(source, compiledNode);
+        return compiledNode;
+    }
+
+    private void attachActivityInvocationConfig(DslNodeSpec source, CompiledNode compiledNode) {
+        if (compiledNode == null) {
+            return;
+        }
+
+        Map<String, Object> config = compiledNode.getConfig() != null
+                ? new HashMap<>(compiledNode.getConfig())
+                : new HashMap<>();
+
+        Map<String, Object> activityConfig = buildActivityConfigFromPolicy(source.getPolicy());
+        if (!activityConfig.isEmpty()) {
+            Object existingActivityConfig = config.get("activityConfig");
+            if (existingActivityConfig instanceof Map<?, ?> existingMap) {
+                Map<String, Object> mergedActivityConfig = new HashMap<>();
+                existingMap.forEach((key, value) -> mergedActivityConfig.put(String.valueOf(key), value));
+                mergedActivityConfig.putAll(activityConfig);
+                config.put("activityConfig", mergedActivityConfig);
+            } else {
+                config.put("activityConfig", activityConfig);
+            }
+        }
+
+        compiledNode.setConfig(config);
+    }
+
+    private Map<String, Object> buildActivityConfigFromPolicy(NodePolicyConfig policy) {
+        if (policy == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Object> activityConfig = new HashMap<>();
+
+        NodePolicyConfig.TimeoutConfig timeoutConfig = policy.getTimeout();
+        if (timeoutConfig != null && timeoutConfig.getStartToCloseTimeout() != null) {
+            activityConfig.put("timeout", timeoutConfig.getStartToCloseTimeout().toString());
+        }
+
+        NodePolicyConfig.RetryPolicy retryPolicy = policy.getRetryPolicy();
+        if (retryPolicy != null) {
+            Map<String, Object> retryConfig = new HashMap<>();
+            if (retryPolicy.getInitialInterval() != null) {
+                retryConfig.put("initialInterval", retryPolicy.getInitialInterval().toString());
+            }
+            if (retryPolicy.getMaxInterval() != null) {
+                retryConfig.put("maxInterval", retryPolicy.getMaxInterval().toString());
+            }
+            if (retryPolicy.getMaxAttempts() != null) {
+                retryConfig.put("maxAttempts", retryPolicy.getMaxAttempts());
+            }
+            if (!retryConfig.isEmpty()) {
+                activityConfig.put("retry", retryConfig);
+            }
+        }
+
+        return activityConfig;
     }
 
     /**
@@ -592,5 +656,142 @@ public class DefaultDslCompiler implements DslCompiler {
 
         plan.setPredecessors(predecessors);
         plan.setSuccessors(successors);
+    }
+
+    /**
+     * 计算变量依赖图（编译期构建）
+     * <p>
+     * 分析每个节点配置中的表达式引用，构建变量依赖关系图。
+     * 用于运行时精准内存清理：只有当一个变量的引用计数降为 0 时，才从上下文中删除。
+     *
+     * <h3>算法流程：</h3>
+     * <pre>
+     * 1. 遍历所有节点
+     * 2. 检查节点配置中的所有字符串值
+     * 3. 提取 ${xxx.yyy} 格式的变量引用
+     * 4. 提取节点ID作为依赖源（如 ${A.output} → A）
+     * 5. 统计每个节点被多少下游节点引用（引用计数）
+     * </pre>
+     *
+     * <h3>示例：</h3>
+     * <pre>
+     * 节点配置：
+     * - node-A: config = {}
+     * - node-B: config = {text: "${A.output}"}     // B 引用了 A
+     * - node-C: config = {msg: "${A.output}"}     // C 也引用了 A
+     * - node-D: config = {data: "${B.result}"}    // D 引用了 B
+     *
+     * variableDependencies = {
+     *     "node-B": {"node-A": 1},           // B 依赖 A
+     *     "node-C": {"node-A": 1},           // C 依赖 A
+     *     "node-D": {"node-B": 1}             // D 依赖 B
+     * }
+     *
+     * 运行时引用计数（从后往前推）：
+     * - A 被 B 和 C 引用 → refCount = 2
+     * - B 被 D 引用 → refCount = 1
+     * - C 无下游引用 → refCount = 0（执行完可清理）
+     * - D 无下游引用 → refCount = 0（执行完可清理）
+     * </pre>
+     *
+     * @param dsl 工作流 DSL
+     * @param plan 执行计划（用于获取编译后的节点配置）
+     */
+    private void computeVariableDependencies(WorkflowDsl dsl, ExecutionPlan plan) {
+        Map<String, Map<String, Integer>> variableDependencies = new TreeMap<>();
+
+        // 遍历所有节点，构建依赖图
+        for (Map.Entry<String, CompiledNode> entry : plan.getNodes().entrySet()) {
+            String nodeId = entry.getKey();
+            CompiledNode node = entry.getValue();
+            Map<String, Object> config = node.getConfig();
+
+            if (config == null || config.isEmpty()) {
+                continue;
+            }
+
+            // 分析节点配置中的变量引用
+            Map<String, Integer> dependencies = new TreeMap<>();
+            analyzeConfigForReferences(nodeId, config, dependencies, plan.getNodes().keySet());
+
+            if (!dependencies.isEmpty()) {
+                variableDependencies.put(nodeId, dependencies);
+            }
+        }
+
+        plan.setVariableDependencies(variableDependencies);
+    }
+
+    /**
+     * 分析节点配置中的变量引用（递归实现）
+     * <p>
+     * 该方法会遍历配置对象的所有层级，提取出所有符合 ${xxx.yyy} 格式的表达式，
+     * 并统计当前节点对上游节点的依赖次数。
+     *
+     * @param nodeId        当前正在分析的节点ID（主要用于调试或错误定位）
+     * @param config        节点的配置对象（可能包含嵌套的 Map 或 List）
+     * @param dependencies  【输出参数】用于累加依赖关系的 Map，Key=上游节点ID, Value=引用次数
+     * @param validNodeIds  工作流中所有合法节点ID的集合，用于过滤掉非节点引用的全局变量
+     */
+    private void analyzeConfigForReferences(String nodeId, Map<String, Object> config,
+                                            Map<String, Integer> dependencies, Set<String> validNodeIds) {
+        // 1. 遍历当前层级的所有配置项
+        for (Map.Entry<String, Object> entry : config.entrySet()) {
+            Object value = entry.getValue();
+
+            // --- 情况 A：值是字符串，检查是否包含变量表达式 ---
+            if (value instanceof String) {
+                String strValue = (String) value;
+                // 使用预编译的正则匹配 ${...} 模式
+                Matcher matcher = VARIABLE_PATTERN.matcher(strValue);
+                while (matcher.find()) {
+                    String varExpr = matcher.group(1); // 获取花括号内的内容，如 "A.output"
+
+                    // 只有包含 "." 的才被认为是节点间引用（如 A.output），排除简单变量
+                    if (varExpr.contains(".")) {
+                        // 提取点号前面的部分作为上游节点ID（即 "A"）
+                        String referencedNodeId = varExpr.split("\\.")[0];
+
+                        // 校验：确保这个 ID 确实是工作流里的一个节点，而不是全局常量
+                        if (validNodeIds.contains(referencedNodeId)) {
+                            // 累加引用计数：如果 B 两次引用了 A，那么 A 的计数就是 2
+                            dependencies.merge(referencedNodeId, 1, Integer::sum);
+                        }
+                    }
+                }
+
+            // --- 情况 B：值是嵌套的 Map，递归深入分析 ---
+            } else if (value instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> nestedMap = (Map<String, Object>) value;
+                // 递归调用：进入下一层 Map 继续寻找表达式
+                analyzeConfigForReferences(nodeId, nestedMap, dependencies, validNodeIds);
+
+            // --- 情况 C：值是 List 数组，遍历数组元素分析 ---
+            } else if (value instanceof List) {
+                for (Object item : (List<?>) value) {
+                    // 如果数组元素是 Map，递归分析
+                    if (item instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> nestedMap = (Map<String, Object>) item;
+                        analyzeConfigForReferences(nodeId, nestedMap, dependencies, validNodeIds);
+
+                    // 如果数组元素是字符串，执行与情况 A 相同的匹配逻辑
+                    } else if (item instanceof String) {
+                        String strValue = (String) item;
+                        Matcher matcher = VARIABLE_PATTERN.matcher(strValue);
+                        while (matcher.find()) {
+                            String varExpr = matcher.group(1);
+                            if (varExpr.contains(".")) {
+                                String referencedNodeId = varExpr.split("\\.")[0];
+                                if (validNodeIds.contains(referencedNodeId)) {
+                                    dependencies.merge(referencedNodeId, 1, Integer::sum);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

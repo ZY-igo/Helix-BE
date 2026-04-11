@@ -9,8 +9,6 @@ import com.sipc115.helix.integration.workflow.engine.TemporalWorkflowRuntimeBrid
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * DSL 工作流编排器实现
@@ -283,10 +281,6 @@ public class DslOrchestratorWorkflowImpl {
     ) {
         context.setWorkflowStatus(ExecutionStatus.RUNNING);
 
-        // 获取需要保存的参数变量的名称集合
-        Set<String> neededNodeOutputs = computeNeededNodeOutputs(plan);
-        context.getNeededNodeOutputs().addAll(neededNodeOutputs);
-
         String currentNodeId = plan.getEntryNodeId();
         int maxIterations = plan.getNodes().size() * 2;
         int iteration = 0;
@@ -324,7 +318,9 @@ public class DslOrchestratorWorkflowImpl {
             updateStatus(context, currentNodeId, result);
             markNodeCompleted(plan, currentNodeId);
 
-            if (!neededNodeOutputs.contains(node.getId())) {
+            context.decrementRefCount(node.getId());
+
+            if (context.canCleanup(node.getId())) {
                 context.cleanupVariablesForNode(node.getId());
                 result.setOutput(null);
             }
@@ -352,45 +348,6 @@ public class DslOrchestratorWorkflowImpl {
         }
 
         context.setWorkflowStatus(ExecutionStatus.COMPLETED);
-    }
-
-    /**
-     * 计算哪些节点的输出是后续节点需要的
-     * <p>
-     * 通过扫描所有节点的配置，检查是否包含 ${} 表达式引用来确定。
-     * 如果某个节点的输出被其他节点引用，则该节点的输出需要保留。
-     * 用于内存优化：不被引用的节点执行后可以清理其输出。
-     *
-     * <h3>示例：</h3>
-     * <pre>
-     * 节点A 输出: {result: "xxx"}
-     * 节点B 配置: {text: "${A.result}"}  // 引用了A的输出
-     * 节点C 配置: {text: "static text"}  // 没有引用
-     *
-     * 结果：neededNodeOutputs = {A}  // 只有A的输出需要保留
-     * </pre>
-     *
-     * @param plan 执行计划
-     * @return 需要保留输出的节点ID集合
-     */
-    private Set<String> computeNeededNodeOutputs(ExecutionPlan plan) {
-        Set<String> needed = new TreeSet<>();
-        Pattern pattern = Pattern.compile("\\$\\{([^.]+)\\.");
-        for (CompiledNode node : plan.getNodes().values()) {
-            Map<String, Object> config = node.getConfig();
-            if (config != null) {
-                for (Object value : config.values()) {
-                    if (value instanceof String) {
-                        String str = (String) value;
-                        Matcher matcher = pattern.matcher(str);
-                        while (matcher.find()) {
-                            needed.add(matcher.group(1));
-                        }
-                    }
-                }
-            }
-        }
-        return needed;
     }
 
     /**

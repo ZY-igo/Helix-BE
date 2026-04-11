@@ -5,6 +5,7 @@ import com.sipc115.helix.common.constant.BranchKeyConstants;
 import com.sipc115.helix.common.constant.WorkflowConstants;
 import com.sipc115.helix.domain.workflow.CompiledNode;
 import com.sipc115.helix.domain.workflow.DslNodeType;
+import com.sipc115.helix.integration.workflow.engine.ActivityInvocationSpec;
 import com.sipc115.helix.integration.workflow.node.feishu.sendtext.activity.FeishuSendTextActivity;
 import com.sipc115.helix.integration.workflow.runtime.ExecutionContext;
 import com.sipc115.helix.integration.workflow.runtime.NodeExecutionResult;
@@ -101,7 +102,8 @@ public class FeishuSendTextNodeExecutor implements WorkflowNodeExecutor {
         try {
             // 通过 Bridge 获取 Temporal Activity 存根
             // Activity 调用会在 Activity Worker 上执行，而不是 Workflow 线程
-            FeishuSendTextActivity activity = bridge.activities().getActivity(FeishuSendTextActivity.class);
+            ActivityInvocationSpec activitySpec = ActivityInvocationSpec.fromNodeConfig(config);
+            FeishuSendTextActivity activity = bridge.activities().getActivity(FeishuSendTextActivity.class, activitySpec);
 
             // 获取幂等性参数
             Long executionId = context.getExecutionId();
