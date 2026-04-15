@@ -3,6 +3,9 @@ package com.sipc115.helix.integration.connect.llm;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+import java.util.Map;
+
 @Slf4j
 public class LlmAuthClient {
 
@@ -35,6 +38,10 @@ public class LlmAuthClient {
 
     public String chat(String systemPrompt, String userPrompt, double temperature, int maxTokens, String thinking) {
         return apiHandler.chat(baseUrl, apiKey, model, systemPrompt, userPrompt, temperature, maxTokens, thinking);
+    }
+
+    public String chatJson(List<Map<String, Object>> messages, double temperature, int maxTokens, String thinking) {
+        return apiHandler.chatJson(baseUrl, apiKey, model, messages, temperature, maxTokens, thinking);
     }
 
     public String chatComplete(String prompt, double temperature, int maxTokens) {

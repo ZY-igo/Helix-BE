@@ -21,7 +21,29 @@ public class LlmApiHandler {
 
     public String chat(String baseUrl, String apiKey, String model, String systemPrompt, String userPrompt,
                        double temperature, int maxTokens, String thinking) {
-        log.info("[LLM] Calling chat API. baseUrl={}, model={}", baseUrl, model);
+        return chatMessages(
+                baseUrl,
+                apiKey,
+                model,
+                List.of(
+                        Map.of("role", "system", "content", systemPrompt),
+                        Map.of("role", "user", "content", userPrompt)
+                ),
+                temperature,
+                maxTokens,
+                thinking,
+                false
+        );
+    }
+
+    public String chatJson(String baseUrl, String apiKey, String model, List<Map<String, Object>> messages,
+                           double temperature, int maxTokens, String thinking) {
+        return chatMessages(baseUrl, apiKey, model, messages, temperature, maxTokens, thinking, true);
+    }
+
+    public String chatMessages(String baseUrl, String apiKey, String model, List<Map<String, Object>> messages,
+                               double temperature, int maxTokens, String thinking, boolean jsonResponse) {
+        log.info("[LLM] Calling chat API. baseUrl={}, model={}, jsonResponse={}", baseUrl, model, jsonResponse);
 
         RestClient restClient = restClientBuilder
                 .baseUrl(baseUrl)
@@ -30,16 +52,15 @@ public class LlmApiHandler {
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("model", model);
-        payload.put("messages", List.of(
-                Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", userPrompt)
-        ));
+        payload.put("messages", messages);
         payload.put("temperature", temperature);
         payload.put("max_tokens", maxTokens);
         if (thinking != null && !thinking.isEmpty()) {
             payload.put("thinking", Map.of("type", thinking));
         }
-        payload.put("response_format", Map.of("type", "json_object"));
+        if (jsonResponse) {
+            payload.put("response_format", Map.of("type", "json_object"));
+        }
 
         String raw = restClient.post()
                 .uri("/chat/completions")

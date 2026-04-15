@@ -7,6 +7,7 @@ import com.sipc115.helix.domain.workflow.DslEdgeSpec;
 import com.sipc115.helix.domain.workflow.DslNodeSpec;
 import com.sipc115.helix.domain.workflow.DslNodeType;
 import com.sipc115.helix.domain.workflow.ExecutionPlan;
+import com.sipc115.helix.domain.workflow.WorkflowStartResponse;
 import com.sipc115.helix.domain.workflow.WorkflowDsl;
 import com.sipc115.helix.integration.workflow.service.WorkflowExecutionApplicationService;
 import com.sipc115.helix.service.WorkflowApplicationService;
@@ -543,11 +544,12 @@ class WorkflowApplicationServiceTest {
             ));
 
             // 启动执行
-            String workflowRunId = executionService.start(request);
+            WorkflowStartResponse workflowRun = executionService.start(request);
 
-            assertNotNull(workflowRunId);
+            assertNotNull(workflowRun);
+            assertNotNull(workflowRun.getTemporalWorkflowId());
             System.out.println("✓ 工作流执行已启动");
-            System.out.println("  - workflowRunId: " + workflowRunId);
+            System.out.println("  - workflowRunId: " + workflowRun.getTemporalWorkflowId());
             System.out.println("  - workflowId: " + dsl.getWorkflowId());
             System.out.println("  - version: " + dsl.getVersion());
             System.out.println("  ⚠ 工作流在 Temporal 中异步执行，请查看 Temporal UI 监控状态");
